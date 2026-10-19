@@ -12,6 +12,9 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="game-art.css">
+<link rel="preload" href="fonts/LilitaOne-Regular.ttf" as="font" type="font/ttf" crossorigin>
+<link rel="preload" href="fonts/Nunito-Variable.ttf" as="font" type="font/ttf" crossorigin>
 <link rel="modulepreload" href="js/art.js">
 </head>
 <body>
@@ -21,26 +24,28 @@
     <div class="home-bg" aria-hidden="true"></div>
     <div class="home-wrap">
       <div class="hero">
-        <div class="logo"><span class="logo-bird" id="logoBird"></span><div><div class="wordmark">ROOK</div><div class="sub">NIGHT · FAMILY CARD TABLE</div></div></div>
-        <p class="tag">Bid, bury the nest, call trump — play classic Rook with family and friends at a 3D table.</p>
+        <div class="logo"><span class="logo-bird" id="logoBird"></span><div class="wordmark">ROOK NIGHT</div></div>
+        <h1 class="play-banner">Good cards.<br><em>Great company.</em></h1>
         <div class="hero-cards" id="heroCards" aria-hidden="true"></div>
+        <div class="home-badges"><span><i data-art="people"></i>4 players</span><span><i data-art="trophy"></i>2 teams</span><span><i data-art="cards"></i>Let’s play!</span></div>
       </div>
       <div class="signin panel glass">
-        <div class="step-title"><span class="stepn">1</span> Your name</div>
+        <div class="signin-heading"><h2><i data-art="people"></i>Pick your player</h2></div>
+        <label class="step-title" for="nameInput"><i data-art="chat"></i>Your name</label>
         <input id="nameInput" maxlength="20" placeholder="e.g. Grandma Jo" autocomplete="nickname" aria-label="Your name">
-        <div class="step-title"><span class="stepn">2</span> Pick your character <span class="char-label" id="charLabel"></span></div>
+        <div class="step-title"><i data-art="palette"></i>Your look <span class="char-label" id="charLabel"></span></div>
         <div class="char-select">
           <div class="char-preview" id="charPreview"><canvas id="previewCanvas"></canvas><div class="preview-2d" id="preview2d"></div>
             <button class="arrow left" id="charPrev" aria-label="Previous character">‹</button><button class="arrow right" id="charNext" aria-label="Next character">›</button></div>
-          <div class="char-grid" id="charGrid" role="listbox" aria-label="Characters"></div>
+          <div class="char-grid" id="charGrid" role="group" aria-label="Characters"></div>
         </div>
-        <div class="step-title"><span class="stepn">3</span> Play</div>
-        <button id="createBtn" class="btn primary big">Start a new table</button>
+        <details class="customize"><summary><i data-art="shirt"></i>Dress up!</summary><div id="appearanceControls"></div></details>
+        <button id="createBtn" class="btn primary big"><i data-art="cards"></i>Create a table <span aria-hidden="true">→</span></button>
         <div class="join-row">
           <input id="codeInput" maxlength="4" placeholder="CODE" autocapitalize="characters" class="code-input" aria-label="Table code">
-          <button id="joinBtn" class="btn outline">Join table</button>
+          <button id="joinBtn" class="btn outline"><i data-art="join"></i>Join table</button>
         </div>
-        <p class="fine">Family rules: 41-card deck (5–14 + Rook) · 9 cards each · 5 in the nest · play to 500</p>
+        <details class="quick-rules"><summary>New to the table?</summary><p>Partners sit across. Win the bid, choose trump, and take tricks together. First team to make its bid and reach 500 wins. Missing a player? Add a bot.</p></details>
         <button id="installBtn" class="btn ghost tiny hidden">⬇ Install app</button>
       </div>
     </div>
@@ -55,20 +60,21 @@
     </header>
     <div class="lobby-wrap">
       <div class="lobby-main panel glass">
-        <div class="lobby-head"><h2>Seats</h2><div class="teams-note"><span class="tdot t0"></span>Team 1 sits across · <span class="tdot t1"></span>Team 2 sits across</div></div>
+        <div class="lobby-head"><h2><i data-art="cards"></i>Gather round!</h2><div class="teams-note"><i data-art="people"></i>Partners sit across</div></div>
+        <div id="teamCards" class="team-cards"></div>
         <div id="lobbySeats" class="lobby-seats"></div>
         <div class="lobby-actions">
-          <button id="fillBotsBtn" class="btn outline">Fill empty seats with bots</button>
-          <button id="startBtn" class="btn primary">Deal the cards</button>
+          <button id="fillBotsBtn" class="btn outline"><i data-art="bot"></i>Add bot friends</button>
+          <button id="startBtn" class="btn primary"><i data-art="cards"></i>Deal the cards!</button>
         </div>
         <div id="lobbyHint" class="hint"></div>
       </div>
       <aside class="side">
-        <details class="panel glass" open>
-          <summary>House rules &amp; settings</summary>
+        <details class="panel glass">
+          <summary><i data-art="settings"></i>House rules</summary>
           <form id="settingsForm" class="settings"></form>
         </details>
-        <div class="panel glass chat-panel"><div class="panel-title">Table talk</div><div class="chat-log" data-chat></div>
+        <div class="panel glass chat-panel"><div class="panel-title"><i data-art="chat"></i>Table talk</div><div class="chat-log" data-chat></div>
           <form class="chat-form" data-chatform><input maxlength="200" placeholder="Say something nice…" aria-label="Chat message"><button class="btn tiny primary">Send</button></form></div>
       </aside>
     </div>
@@ -84,6 +90,7 @@
         <button id="chatToggle" class="btn icon ghost" title="Chat & menu" aria-label="Chat and menu"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg><span id="chatBadge" class="badge hidden"></span></button>
       </div>
     </header>
+    <div id="handTracker" class="hand-tracker" aria-label="Current hand points"></div>
     <div class="game-wrap">
       <div class="table-area" id="tableArea">
         <div class="table2d" id="table2d"><div class="felt"><div class="felt-bird"></div></div></div>
@@ -100,19 +107,21 @@
       <div class="hand-wrap"><div class="hand" id="hand"></div></div>
     </div>
     <aside class="drawer" id="drawer">
-      <div class="drawer-head"><b>Table talk</b><button class="btn icon ghost" id="closeDrawer" aria-label="Close">✕</button></div>
+      <div class="drawer-head"><b><i data-art="chat"></i>Table talk</b><button class="btn icon ghost" id="closeDrawer" aria-label="Close">✕</button></div>
+      <button class="btn outline" id="drawerCharacter"><i data-art="palette"></i>Dress up!</button>
+      <div id="drawerTeams" class="team-cards"></div>
       <div class="chat-log" data-chat></div>
       <form class="chat-form" data-chatform><input maxlength="200" placeholder="Nice play, partner…" aria-label="Chat message"><button class="btn tiny primary">Send</button></form>
-      <div class="panel-title">Graphics</div>
+      <div class="panel-title"><i data-art="settings"></i>Table style</div>
       <div class="seg" id="gfxSeg"><button data-gfx="high">3D High</button><button data-gfx="low">3D Lite</button><button data-gfx="2d">2D</button></div>
-      <div class="panel-title">What happened</div>
+      <div class="panel-title"><i data-art="cards"></i>The play-by-play</div>
       <div class="log" id="log"></div>
       <div class="host-tools" id="hostTools"></div>
       <div class="drawer-foot"><button class="btn tiny outline" id="drawerInvite">Copy invite link</button><button class="btn tiny ghost" id="drawerLeave">Leave table</button></div>
     </aside>
   </section>
 
-  <div id="modal" class="modal hidden"><div class="modal-card" id="modalCard"></div></div>
+  <div id="modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Game dialog"><div class="modal-card" id="modalCard"></div></div>
   <div id="toast" class="toast hidden" role="status"></div>
   <div id="conn" class="conn hidden">Reconnecting…</div>
 </div>

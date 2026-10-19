@@ -11,6 +11,10 @@ npm test             # unit tests for the rules engine + 25 simulated 4-bot game
 npm run sim -- 20    # simulate 20 bot-only games and print results
 node scripts/e2e-socket.js http://localhost:3000   # socket smoke test: 1 scripted human + 3 bots, full game
 ```
+On Windows PowerShell, use `npm.cmd` if execution policy blocks `npm.ps1`.
+`npm test` also covers team-name approvals, appearance validation and syncing,
+live hand totals, and 3D character construction. The socket integration test
+starts its own temporary server on an available port.
 To share over the internet without hosting: `cloudflared tunnel --url http://localhost:3000` (prints a temporary `*.trycloudflare.com` URL).
 
 ## How to play
@@ -69,3 +73,48 @@ To share over the internet without hosting: `cloudflared tunnel --url http://loc
 - Characters: 12 procedural characters (`public/js/art.js` specs, `public/js/three3d.js` models). Pick one on sign-in; stored in localStorage and synced via the server (`character` on create/join/hello, `setCharacter` event). Bots get random characters.
 - Graphics menu (chat drawer): 3D High / 3D Lite / 2D. Phones default to Lite; no-WebGL devices fall back to 2D automatically. Add `?gfx=2d` to force 2D.
 - Installable PWA: `manifest.webmanifest`, `sw.js` (network-first, offline shell), icons in `public/icons/`.
+
+## Clubhouse update
+- A refreshed navy, blue and warm-gold interface: compact arrival screen, visual
+  seat cards, collapsible rules, and matching table, scoreboard and recap styling.
+- **Make it yours** on the arrival screen offers skin tone, outfit, hair color,
+  headwear and eyewear. Preferences persist in this browser and sync to the table
+  on join/reconnect. Use **Character** in the lobby or **Your character** in the
+  game menu to update them. The 3D models and 2D portraits use the same choices.
+  All artwork is procedural; no external model downloads or new dependencies.
+- Opposite seats form a team (1 & 3, 2 & 4). Once both seats are filled, either
+  player can propose a name in the lobby or game menu. The other human must accept;
+  bots approve automatically. Declining keeps the current name. Changing team
+  members resets the name and any proposal; reconnecting to the same seat does not.
+- The hand tracker separates captured points from the overall game score. It
+  shows the bid, points needed, and how many additional points the bidders can
+  afford to lose. It marks a bid secured or mathematically set using captured
+  points only. Unawarded points include the nest, which is credited on the last
+  trick. Hidden hands and nest contents remain private.
+
+## Illustrated visual update
+- Local Lilita One display lettering and Nunito interface text, with illustrated
+  SVG controls, a layered title crest, raised buttons and score badges. Font
+  licenses and attribution are bundled in `public/fonts/`.
+- `public/js/characters.js` builds smooth toy-like characters: sculpted heads,
+  expressive eyes, rounded hair, curved glasses, detailed sweaters and soft
+  materials. The preview and table share these models and wardrobe choices.
+  Characters blink and gently look around; reduced-motion settings are respected.
+- The 2D portraits use matching shaded faces, expressive eyes and sweater details.
+  Headwear and eyewear selectors show portraits of each option.
+- `public/game-art.css` contains the illustrated interface styling;
+  `public/js/ui-art.js` contains the original vector icons and title treatment.
+
+## Barbarian model trial
+- Choose **Barbarian** in the character grid, or open `/?character=barbarian&gfx=high`.
+  The existing character choices remain available. The Barbarian has a fixed costume.
+- A local, textured GLB is shared by the home preview and table. The portrait is used
+  in the lobby, in 2D mode, and while the model loads. Each character has its own head
+  motion; reduced-motion preferences are respected.
+- Source scene: `art-source/barbarian/barbarian.blend`. Rebuild with
+  `blender --background --python scripts/build-barbarian.py`.
+- `scripts/verify-barbarian.py` reimports the exported asset and renders a preview.
+  Runtime loading/disposal and asset structure are checked by `npm test`.
+- The camera looks from your seat, so your own 3D body is hidden at the table.
+  To see this model across the table, join from a second browser profile, select
+  Barbarian there, and fill the remaining seats with bots.

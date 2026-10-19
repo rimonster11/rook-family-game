@@ -1,0 +1,7 @@
+{
+  "name": "Barbarian",
+  "origin": "Blender-built prototype",
+  "triangles": 69572,
+  "embeddedTextures": 6,
+  "rig": "Head pivot; no skeletal animation"
+}

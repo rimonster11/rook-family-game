@@ -34,7 +34,7 @@ function drawBird(ctx, x, y, size, fill, eye, wing) {
 export const CW = 256, CH = 360;
 export function drawCardFace(ctx, c) {
   ctx.clearRect(0, 0, CW, CH);
-  const font = '"Inter","Segoe UI",Roboto,Helvetica,Arial,sans-serif';
+  const font = '"Rook Display","Trebuchet MS",sans-serif';
   if (c.id === 'ROOK') {
     rr(ctx, 4, 4, CW - 8, CH - 8, 22); const g = ctx.createLinearGradient(0, 0, 0, CH); g.addColorStop(0, '#1f4fd1'); g.addColorStop(1, '#0a2470'); ctx.fillStyle = g; ctx.fill();
     ctx.lineWidth = 6; ctx.strokeStyle = '#fff'; rr(ctx, 16, 16, CW - 32, CH - 32, 14); ctx.stroke();
@@ -86,13 +86,17 @@ export const CHARACTERS = [
   { label: 'Harper', skin: '#edb990', hair: '#8b4513', style: 'curly', shirt: '#22c55e' },
   { label: 'Tatum', skin: '#3e2618', hair: '#111', style: 'long', shirt: '#a5b4fc', hat: 'tophat', hatColor: '#0f172a' },
   { label: 'Ash', skin: '#d9a07a', hair: '#e5e7eb', style: 'bob', shirt: '#0f766e', glasses: 'square', hat: 'cowboy', hatColor: '#7c4a2a' },
+  { label: 'Barbarian', model: 'barbarian', portrait: '/models/barbarian/portrait.png', skin: '#e5ad80', hair: '#f6c629', shirt: '#795039' },
 ];
-export const charOf = (i) => CHARACTERS[((Number(i) || 0) % CHARACTERS.length + CHARACTERS.length) % CHARACTERS.length];
+import './style-options.js';
+export const charOf = (i, appearance = {}) => globalThis.RookStyle.apply(CHARACTERS[((Number(i) || 0) % CHARACTERS.length + CHARACTERS.length) % CHARACTERS.length], appearance);
 const shade = (hex, f) => { const n = parseInt(hex.slice(1), 16); let r = n >> 16, g = (n >> 8) & 255, b = n & 255; const m = (v) => Math.max(0, Math.min(255, Math.round(f < 0 ? v * (1 + f) : v + (255 - v) * f))); return '#' + ((1 << 24) | (m(r) << 16) | (m(g) << 8) | m(b)).toString(16).slice(1); };
 export { shade };
 
-export function avatarSVG(i, { ring = null, bg = true } = {}) {
-  const c = charOf(i); const H = c.hair, sk = c.skin;
+export function avatarSVG(i, { ring = null, bg = true, appearance = {} } = {}) {
+  const c = charOf(i, appearance); const H = c.hair, sk = c.skin;
+  if (c.model) return `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="${c.label}">${bg ? '<circle cx="50" cy="50" r="48" fill="#10294f"/>' : ''}<image href="${c.portrait}" x="3" y="3" width="94" height="94"/>${ring ? `<circle cx="50" cy="50" r="47" fill="none" stroke="${ring}" stroke-width="3"/>` : ''}</svg>`;
+  const id = 'cl' + Math.random().toString(36).slice(2, 8);
   let back = '', front = '', hat = '', face = '';
   switch (c.style) {
     case 'long': back = `<path d="M27 46 C25 72 30 86 38 88 L62 88 C70 86 75 72 73 46 Z" fill="${H}"/>`; front = `<path d="M29 46 C29 30 38 24 50 24 C62 24 71 30 71 46 C64 38 52 36 40 38 C35 40 31 43 29 46Z" fill="${H}"/>`; break;
@@ -113,10 +117,10 @@ export function avatarSVG(i, { ring = null, bg = true } = {}) {
     case 'headband': hat = `<rect x="29" y="35" width="42" height="6" rx="3" fill="${hc}"/>`; break;
     case 'cowboy': hat = `<path d="M18 36 C28 42 72 42 82 36 C78 44 22 44 18 36Z" fill="${shade(hc, -0.2)}"/><path d="M33 37 C32 22 40 18 50 22 C60 18 68 22 67 37 Z" fill="${hc}"/><rect x="33" y="32" width="34" height="3" fill="#1f2937"/>`; break;
   }
-  face += `<circle cx="42" cy="50" r="2.6" fill="#1b1b22"/><circle cx="58" cy="50" r="2.6" fill="#1b1b22"/><circle cx="43" cy="49" r=".8" fill="#fff"/><circle cx="59" cy="49" r=".8" fill="#fff"/>`;
-  face += `<circle cx="37" cy="57" r="3.5" fill="#ff7a8a" opacity=".35"/><circle cx="63" cy="57" r="3.5" fill="#ff7a8a" opacity=".35"/>`;
+  face += [42,58].map((x) => `<ellipse cx="${x}" cy="50" rx="5.4" ry="6.6" fill="#fff9e9"/><ellipse cx="${x+.5}" cy="51" rx="3.1" ry="4.2" fill="#557d83"/><ellipse cx="${x+.5}" cy="51" rx="1.8" ry="2.8" fill="#182d3d"/><circle cx="${x-.8}" cy="48.5" r="1.5" fill="#fff"/><path d="M${x-4} 41q4-3 8 0" fill="none" stroke="${H}" stroke-width="2.2" stroke-linecap="round"/>`).join('');
+  face += `<ellipse cx="35" cy="57" rx="4" ry="2.5" fill="#e99692" opacity=".3"/><ellipse cx="65" cy="57" rx="4" ry="2.5" fill="#e99692" opacity=".3"/><ellipse cx="50" cy="56" rx="3.5" ry="3" fill="${shade(sk,-.07)}"/><ellipse cx="49" cy="55" rx="1.8" ry="1" fill="${shade(sk,.2)}"/>`;
   if (c.extra === 'beard') face += `<path d="M32 52 C32 70 42 76 50 76 C58 76 68 70 68 52 C64 62 58 64 50 64 C42 64 36 62 32 52Z" fill="${H}"/>`;
-  face += `<path d="M43 60 C46 64 54 64 57 60" stroke="#7a2e2e" stroke-width="2.2" fill="none" stroke-linecap="round"/>`;
+  face += `<path d="M43 62 Q50 65 57 62 Q56 70 50 70 Q44 70 43 62" fill="#733c48"/><path d="M44 63 Q50 65 56 63 L55 65 Q50 67 45 65Z" fill="#fff8e6"/><ellipse cx="50" cy="68.5" rx="3" ry="1" fill="#d88391"/>`;
   if (c.extra === 'mustache') face += `<path d="M41 58 C45 55 49 57 50 58 C51 57 55 55 59 58 C55 61 52 59 50 59 C48 59 45 61 41 58Z" fill="${H}"/>`;
   if (c.glasses === 'round') face += `<g stroke="#1f2937" stroke-width="1.8" fill="rgba(255,255,255,.15)"><circle cx="42" cy="50" r="6"/><circle cx="58" cy="50" r="6"/><path d="M48 50 L52 50"/></g>`;
   if (c.glasses === 'square') face += `<g stroke="#1e3a8a" stroke-width="2" fill="rgba(255,255,255,.15)"><rect x="35" y="45" width="13" height="10" rx="2"/><rect x="52" y="45" width="13" height="10" rx="2"/><path d="M48 50 L52 50"/></g>`;
@@ -124,8 +128,7 @@ export function avatarSVG(i, { ring = null, bg = true } = {}) {
   if (c.extra === 'earrings') face += `<circle cx="29" cy="60" r="2.2" fill="#e5e7eb"/><circle cx="71" cy="60" r="2.2" fill="#e5e7eb"/>`;
   const bow = c.extra === 'bowtie' ? `<path d="M42 82 L50 86 L58 82 L58 90 L50 86 L42 90Z" fill="#e11d48"/>` : '';
   const ringEl = ring ? `<circle cx="50" cy="50" r="48" fill="none" stroke="${ring}" stroke-width="4"/>` : '';
-  const id = 'cl' + Math.random().toString(36).slice(2, 8);
-  return `<svg class="ava" viewBox="0 0 100 100" aria-hidden="true"><defs><clipPath id="${id}"><circle cx="50" cy="50" r="48"/></clipPath><radialGradient id="${id}g" cx=".5" cy=".3" r=".8"><stop offset="0" stop-color="#2a5bd7"/><stop offset="1" stop-color="#0a1f5c"/></radialGradient></defs>
-<g clip-path="url(#${id})">${bg ? `<rect width="100" height="100" fill="url(#${id}g)"/>` : ''}${back}<path d="M18 104 C18 84 30 78 50 78 C70 78 82 84 82 104Z" fill="${c.shirt}"/><rect x="45" y="68" width="10" height="12" fill="${shade(sk, -0.12)}"/>${bow}
-<ellipse cx="29" cy="52" rx="4" ry="6" fill="${shade(sk, -0.08)}"/><ellipse cx="71" cy="52" rx="4" ry="6" fill="${shade(sk, -0.08)}"/><ellipse cx="50" cy="50" rx="21" ry="23" fill="${sk}"/>${face}${front}${hat}</g>${ringEl}</svg>`;
+  return `<svg class="ava" viewBox="0 0 100 100" aria-hidden="true"><defs><clipPath id="${id}"><circle cx="50" cy="50" r="48"/></clipPath><radialGradient id="${id}g" cx=".4" cy=".3" r=".8"><stop stop-color="#9fcee0"/><stop offset="1" stop-color="#2b6394"/></radialGradient><radialGradient id="${id}skin" cx=".35" cy=".25" r=".8"><stop stop-color="${shade(sk,.15)}"/><stop offset=".7" stop-color="${sk}"/><stop offset="1" stop-color="${shade(sk,-.17)}"/></radialGradient><linearGradient id="${id}shirt" x2=".8" y2="1"><stop stop-color="${shade(c.shirt,.22)}"/><stop offset="1" stop-color="${shade(c.shirt,-.2)}"/></linearGradient><linearGradient id="${id}hair" x2=".7" y2="1"><stop stop-color="${shade(H,.2)}"/><stop offset="1" stop-color="${H}"/></linearGradient></defs>
+<g clip-path="url(#${id})">${bg ? `<rect width="100" height="100" fill="url(#${id}g)"/>` : ''}${back}<path d="M18 104 C18 84 30 78 50 78 C70 78 82 84 82 104Z" fill="url(#${id}shirt)"/><path d="M39 80q11 10 22 0" fill="none" stroke="${shade(c.shirt,-.3)}" stroke-width="4"/><rect x="45" y="68" width="10" height="12" fill="${shade(sk, -0.12)}"/>${bow}<circle cx="34" cy="87" r="3.5" fill="#f4d387"/><circle cx="50" cy="92" r="1.5" fill="#fff1d4"/>
+<ellipse cx="29" cy="52" rx="4" ry="6" fill="${shade(sk, -0.08)}"/><ellipse cx="71" cy="52" rx="4" ry="6" fill="${shade(sk, -0.08)}"/><path d="M28 47C28 18 72 18 72 47C72 65 64 75 50 75C36 75 28 65 28 47" fill="url(#${id}skin)"/>${face}${front}${hat}</g>${ringEl}<circle cx="50" cy="50" r="47" fill="none" stroke="#ffffff33" stroke-width="2"/></svg>`.replaceAll(`fill="${H}"`, `fill="url(#${id}hair)"`);
 }

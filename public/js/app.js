@@ -1,5 +1,10 @@
 /* Rook Night client */
 import { cardHTML, backHTML, birdSVG, SUIT, cardPts, CHARACTERS, charOf, avatarSVG } from './art.js';
+import './hand-progress.js';
+import { icon, wordmark } from './ui-art.js';
+const Style = globalThis.RookStyle;
+let appearance = {};
+try { appearance = Style.normalize(JSON.parse(localStorage.getItem('rook.appearance') || '{}')); } catch { /* Use preset if stored data is invalid. */ }
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -9,8 +14,9 @@ const NCH = CHARACTERS.length;
 
 let playerId = localStorage.getItem('rook.playerId');
 if (!playerId) { playerId = (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2) + Date.now()); localStorage.setItem('rook.playerId', playerId); }
-let charIdx = Number(localStorage.getItem('rook.char'));
+let charIdx = Number(localStorage.getItem('rook.char') ?? (NCH - 1));
 if (!(charIdx >= 0 && charIdx < NCH)) charIdx = Math.floor(Math.random() * NCH);
+if (new URLSearchParams(location.search).get('character') === 'barbarian') charIdx = NCH - 1;
 let S = null, picked = new Set(), pickedTrump = null, lastTrickShownNo = 0, lastTrickUntil = 0, shownRecapHand = 0, chatSeen = 0, drawerOpen = false;
 let prevHandIds = null, nestIds = new Set(), bidChoice = null, lastHandNo = 0;
 
@@ -19,20 +25,22 @@ const isWeak = () => matchMedia('(pointer:coarse)').matches || (navigator.device
 let gfx = localStorage.getItem('rook.gfx') || (isWeak() ? 'low' : 'high');
 if (new URLSearchParams(location.search).get('gfx')) gfx = new URLSearchParams(location.search).get('gfx');
 let T3 = null, table = null, t3Promise = null, preview = null;
-const load3D = () => (t3Promise ||= import('./three3d.js').then((m) => (m.webglOK() ? (T3 = m) : null)).catch((e) => { console.warn('3D unavailable', e); return null; }));
+const load3D = () => (t3Promise ||= Promise.all([import('./three3d.js'), document.fonts.load('16px "Rook Display"')]).then(([m]) => (m.webglOK() ? (T3 = m) : null)).catch((e) => { console.warn('3D unavailable', e); return null; }));
 
 const socket = io({ reconnection: true });
 const urlCode = new URLSearchParams(location.search).get('room');
 $('#nameInput').value = localStorage.getItem('rook.name') || '';
 if (urlCode) $('#codeInput').value = urlCode.toUpperCase();
 $('#logoBird').innerHTML = birdSVG('#fff', '#0a1f5c', 'rgba(10,31,92,.25)');
+$('.wordmark').innerHTML = wordmark();
+$$('[data-art]').forEach((el) => { el.innerHTML = icon(el.dataset.art); });
 $$('.mini-bird').forEach((e) => (e.innerHTML = birdSVG('#fff', '#0a1f5c', 'rgba(10,31,92,.25)')));
 $('#heroCards').innerHTML = [{ id: 'G14', color: 'G', rank: 14 }, { id: 'R10', color: 'R', rank: 10 }, { id: 'ROOK' }, { id: 'Y5', color: 'Y', rank: 5 }, { id: 'B1', color: 'B', rank: 13 }].map((c, i) => cardHTML(c, 'hc hc' + i)).join('');
 
 socket.on('connect', () => {
   $('#conn').classList.add('hidden');
-  const code = urlCode || localStorage.getItem('rook.room');
-  if (code) socket.emit('hello', { playerId, code, character: charIdx });
+  const code = S?.room.code || new URLSearchParams(location.search).get('room') || localStorage.getItem('rook.room');
+  if (code) socket.emit('hello', { playerId, code, character: charIdx, appearance });
 });
 socket.on('disconnect', () => { if (S) $('#conn').classList.remove('hidden'); });
 socket.on('noRoom', () => { localStorage.removeItem('rook.room'); if (urlCode) toast('That table has closed — start a new one!'); show('home'); });
@@ -51,8 +59,8 @@ const inviteLink = () => location.origin + location.pathname + '?room=' + S.room
 const copyInvite = () => { const link = inviteLink(); if (navigator.share && matchMedia('(pointer:coarse)').matches) return navigator.share({ title: 'Join my Rook table', text: `Join my Rook table — code ${S.room.code}`, url: link }).catch(() => {}); (navigator.clipboard?.writeText(link) || Promise.reject()).then(() => toast('Invite link copied!'), () => prompt('Copy this link:', link)); };
 const leave = () => { if (confirm('Leave this table?')) { socket.emit('leave'); localStorage.removeItem('rook.room'); history.replaceState(null, '', location.pathname); S = null; closeDrawer(); show('home'); } };
 
-$('#createBtn').onclick = () => { const name = getName(); if (!name) { $('#nameInput').focus(); return toast('Tell us your name first 🙂'); } socket.emit('createRoom', { name, playerId, character: charIdx }); };
-$('#joinBtn').onclick = () => { const name = getName(); const code = $('#codeInput').value.trim().toUpperCase(); if (!name) { $('#nameInput').focus(); return toast('Tell us your name first 🙂'); } if (code.length !== 4) return toast('Table codes are 4 characters'); socket.emit('joinRoom', { name, playerId, code, character: charIdx }); };
+$('#createBtn').onclick = () => { const name = getName(); if (!name) { $('#nameInput').focus(); return toast('Tell us your name first 🙂'); } socket.emit('createRoom', { name, playerId, character: charIdx, appearance }); };
+$('#joinBtn').onclick = () => { const name = getName(); const code = $('#codeInput').value.trim().toUpperCase(); if (!name) { $('#nameInput').focus(); return toast('Tell us your name first 🙂'); } if (code.length !== 4) return toast('Table codes are 4 characters'); socket.emit('joinRoom', { name, playerId, code, character: charIdx, appearance }); };
 $('#codeInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#joinBtn').click(); });
 $('#nameInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') ($('#codeInput').value.trim().length === 4 ? $('#joinBtn') : $('#createBtn')).click(); });
 $('#leaveBtn').onclick = leave; $('#drawerLeave').onclick = leave;
@@ -64,6 +72,7 @@ $('#chatToggle').onclick = () => { drawerOpen = !drawerOpen; $('#drawer').classL
 $('#closeDrawer').onclick = closeDrawer;
 $('#scoreBtn').onclick = () => showScorecard();
 $('#lobbyCharBtn').onclick = () => openCharModal();
+$('#drawerCharacter').onclick = () => openCharModal();
 $$('[data-chatform]').forEach((f) => f.addEventListener('submit', (e) => { e.preventDefault(); const i = $('input', f); if (i.value.trim()) socket.emit('chat', { text: i.value }); i.value = ''; }));
 $$('#gfxSeg button').forEach((b) => (b.onclick = () => { setGfx(b.dataset.gfx); }));
 function setGfx(m) { gfx = m; localStorage.setItem('rook.gfx', m); if (table) { table.dispose(); table = null; } renderGfxSeg(); if (S?.game) renderGame(); }
@@ -72,26 +81,44 @@ renderGfxSeg();
 
 // ---------- character select ----------
 function renderCharGrid(el, onPick) {
-  el.innerHTML = CHARACTERS.map((c, i) => `<button class="char-opt ${i === charIdx ? 'sel' : ''}" data-ch="${i}" role="option" aria-selected="${i === charIdx}" title="${c.label}">${avatarSVG(i)}<span>${c.label}</span></button>`).join('');
+  el.innerHTML = CHARACTERS.map((c, i) => `<button class="char-opt ${i === charIdx ? 'sel' : ''}" data-ch="${i}" aria-pressed="${i === charIdx}" aria-label="${c.label}" title="${c.label}">${avatarSVG(i, { appearance: i === charIdx ? appearance : {} })}<span>${c.label}</span></button>`).join('');
   $$('[data-ch]', el).forEach((b) => (b.onclick = () => onPick(+b.dataset.ch)));
 }
 function pickChar(i) {
   charIdx = ((i % NCH) + NCH) % NCH; localStorage.setItem('rook.char', charIdx);
   renderCharGrid($('#charGrid'), pickChar); $('#charLabel').textContent = charOf(charIdx).label;
-  $('#preview2d').innerHTML = avatarSVG(charIdx); if (preview) preview.set(charIdx);
+  $('#preview2d').innerHTML = avatarSVG(charIdx, { appearance }); if (preview) preview.set(charIdx, appearance);
+  renderAppearance($('#appearanceControls'), () => pickChar(charIdx));
 }
 $('#charPrev').onclick = () => pickChar(charIdx - 1); $('#charNext').onclick = () => pickChar(charIdx + 1);
 pickChar(charIdx);
 function startPreview() {
   if (preview || gfx === '2d') { $('#charPreview').classList.toggle('flat', !preview); return; }
   $('#charPreview').classList.add('flat');
-  load3D().then((m) => { if (!m || preview || curScreen !== 'home') return; try { preview = m.createPreview($('#previewCanvas')); preview.set(charIdx); $('#charPreview').classList.remove('flat'); } catch (e) { console.warn(e); } });
+  load3D().then((m) => { if (!m || preview || curScreen !== 'home') return; try { preview = m.createPreview($('#previewCanvas')); preview.set(charIdx, appearance); $('#charPreview').classList.remove('flat'); } catch (e) { console.warn(e); } });
 }
 function stopPreview() { if (preview) { preview.dispose(); preview = null; $('#charPreview').classList.add('flat'); } }
+function renderAppearance(el, changed) {
+  if (charOf(charIdx).model) {
+    el.innerHTML = '<div class="model-look"><strong>Classic Barbarian</strong><span>Golden hair · leather armor · steel sword</span></div>';
+    return;
+  }
+  const labels = { skin: 'Skin tone', shirt: 'Outfit', hair: 'Hair color', hat: 'Headwear', glasses: 'Eyewear' };
+  const colors = { skin: ['Porcelain', 'Peach', 'Tan', 'Bronze', 'Brown', 'Deep'], shirt: ['Royal', 'Teal', 'Ruby', 'Violet', 'Ivory', 'Honey'], hair: ['Espresso', 'Chestnut', 'Blond', 'Copper', 'Silver', 'Black'] };
+  el.innerHTML = Object.entries(Style.options).map(([key, values]) => `<fieldset class="style-row"><legend>${icon(key === 'shirt' ? 'shirt' : key === 'hat' ? 'hat' : key === 'glasses' ? 'glasses' : 'palette')}${labels[key]}</legend><div class="style-choices">${values.map((value, i) => `<button type="button" class="style-choice ${value.startsWith('#') ? 'swatch' : ''}" data-style="${key}" data-value="${i}" aria-label="${colors[key]?.[i] || value}" title="${colors[key]?.[i] || value}" aria-pressed="${(charOf(charIdx, appearance)[key] || 'none') === value}" ${value.startsWith('#') ? `style="--swatch:${value}"` : ''}>${value.startsWith('#') ? '<span aria-hidden="true">✓</span>' : `${avatarSVG(charIdx, { appearance: { ...appearance, [key]: i } })}<span>${value === 'none' ? 'None' : value}</span>`}</button>`).join('')}</div></fieldset>`).join('') + '<button type="button" class="btn tiny ghost" data-reset>Reset to character preset</button>';
+  $$('[data-style]', el).forEach((button) => button.onclick = () => { appearance[button.dataset.style] = +button.dataset.value; saveAppearance(); renderAppearance(el, changed); changed(); });
+  $('[data-reset]', el).onclick = () => { appearance = {}; saveAppearance(); renderAppearance(el, changed); changed(); };
+}
+function saveAppearance() {
+  localStorage.setItem('rook.appearance', JSON.stringify(appearance));
+  if (S) socket.emit('setCharacter', { character: charIdx, appearance });
+}
+renderAppearance($('#appearanceControls'), () => pickChar(charIdx));
 function openCharModal() {
-  openModal(`<h2>Choose your character</h2><div class="char-grid modal-grid" id="mGrid"></div><div class="modal-btns"><button class="btn primary" id="mDone">Done</button></div>`, 'char');
-  const pick = (i) => { charIdx = i; localStorage.setItem('rook.char', i); socket.emit('setCharacter', { character: i }); renderCharGrid($('#mGrid'), pick); pickChar(i); };
-  renderCharGrid($('#mGrid'), pick); $('#mDone').onclick = closeModal;
+  openModal(`<h2>${icon('palette')} Dress up!</h2><div class="modal-avatar" id="mAvatar"></div><div class="char-grid modal-grid" id="mGrid"></div><div id="mAppearance"></div><div class="modal-btns"><button class="btn primary" id="mDone">Looking good</button></div>`, 'char');
+  const refresh = () => { renderAppearance($('#mAppearance'), refresh); renderCharGrid($('#mGrid'), pick); $('#mAvatar').innerHTML = avatarSVG(charIdx, { appearance }); pickChar(charIdx); renderAppearance($('#appearanceControls'), () => pickChar(charIdx)); };
+  const pick = (i) => { pickChar(i); saveAppearance(); refresh(); };
+  refresh(); renderAppearance($('#mAppearance'), refresh); $('#mDone').onclick = closeModal;
 }
 
 // ---------- PWA ----------
@@ -104,8 +131,8 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
 const mySeat = () => (S && S.you.seat >= 0 ? S.you.seat : 0);
 const relPos = (seat) => POS[(seat - mySeat() + 4) % 4];
 const seatName = (seat) => (S.room.seats[seat]?.name || `Seat ${seat + 1}`);
-const teamName = (t) => { const a = S.room.seats[t], b = S.room.seats[t + 2]; return a && b ? `${a.name} & ${b.name}` : `Team ${t + 1}`; };
-const ava = (seat, ring) => avatarSVG(S.room.seats[seat]?.character ?? 0, { ring });
+const teamName = (t) => S.room.teams?.[t]?.name || `Team ${t + 1}`;
+const ava = (seat, ring) => avatarSVG(S.room.seats[seat]?.character ?? 0, { ring, appearance: S.room.seats[seat]?.appearance });
 const pill = (col) => `<span class="pill s-${col}">${SUIT[col].name}</span>`;
 
 // ---------- render ----------
@@ -155,6 +182,7 @@ function renderSettings() {
 }
 
 function renderLobby() {
+  renderTeams($('#teamCards'));
   $('#lobbyCode').textContent = S.room.code;
   const host = S.you.isHost;
   $('#lobbySeats').innerHTML = [0, 1, 2, 3].map((i) => {
@@ -162,11 +190,11 @@ function renderLobby() {
     const who = s ? `<div class="lava">${ava(i, TEAM_HEX[i % 2])}</div><div class="who">${esc(s.name)}${s.type === 'bot' ? '<span class="botbadge">BOT</span>' : ''}${s.isHost ? '<span class="hostbadge">HOST</span>' : ''}</div><div class="sub">${esc(charOf(s.character).label)}${s.type === 'human' && !s.connected ? ' · away' : ''}</div>`
       : `<div class="lava empty">+</div><div class="who muted">Empty chair</div><div class="sub">&nbsp;</div>`;
     let btns = '';
-    if (!s || (s.type === 'bot' && !mine)) btns += `<button class="btn tiny primary" data-sit="${i}">Sit here</button>`;
+    if (!s || (s.type === 'bot' && !mine)) btns += `<button class="btn tiny primary" data-sit="${i}">${icon('people')}Sit here</button>`;
     if (mine) btns += `<button class="btn tiny outline" data-stand>Stand up</button>`;
-    if (host && !s) btns += `<button class="btn tiny outline" data-bot="${i}">Add bot</button>`;
+    if (host && !s) btns += `<button class="btn tiny outline" data-bot="${i}">${icon('bot')}Add bot</button>`;
     if (host && s?.type === 'bot') btns += `<button class="btn tiny ghost" data-clear="${i}">Remove</button>`;
-    return `<div class="lseat t${i % 2} ${mine ? 'mine' : ''}"><div class="seatno">Seat ${i + 1} · <span class="tdot t${i % 2}"></span>Team ${(i % 2) + 1}${mine ? ' · You' : ''}</div>${who}<div class="btns">${btns}</div></div>`;
+    return `<div class="lseat t${i % 2} ${mine ? 'mine' : ''}" style="--seat-order:${[0, 2, 1, 3][i]}"><div class="seatno">Seat ${i + 1}${mine ? ' · You' : ''}</div><div class="seat-team"><span class="tdot t${i % 2}"></span>${esc(teamName(i % 2))}</div>${who}<div class="btns">${btns}</div></div>`;
   }).join('');
   $$('[data-sit]').forEach((b) => (b.onclick = () => socket.emit('sit', { seat: +b.dataset.sit })));
   $$('[data-stand]').forEach((b) => (b.onclick = () => socket.emit('stand')));
@@ -177,6 +205,31 @@ function renderLobby() {
   $('#startBtn').disabled = !full;
   $('#lobbyHint').innerHTML = host ? (full ? 'Everyone\'s seated. Deal when ready!' : `Share code <b>${S.room.code}</b> or the invite link, or fill empty chairs with bots.`) : 'Waiting for the host to deal…' + (S.room.spectators.length ? `<br>Watching: ${S.room.spectators.map(esc).join(', ')}` : '');
   renderSettings();
+}
+
+function renderTeams(el) {
+  const signature = JSON.stringify([S.room.teams, S.room.seats.map((s) => s && [s.name, s.type]), S.you.seat]);
+  if (el.dataset.signature === signature) return;
+  el.dataset.signature = signature;
+  el.innerHTML = [0, 1].map((t) => {
+    const team = S.room.teams?.[t], p = team?.proposal;
+    const mine = S.you.seat >= 0 && S.you.seat % 2 === t;
+    const ready = S.room.seats[t] && S.room.seats[t + 2];
+    return `<section class="team-card t${t}"><div class="team-card-heading">${icon('trophy')}<strong>${esc(teamName(t))}</strong>${mine ? '<span class="you-tag">YOUR TEAM</span>' : ''}</div><div class="team-partners">${[t, t + 2].map((i) => esc(S.room.seats[i]?.name || 'Open seat')).join(' + ')}</div>${p ? `<div class="name-proposal"><span>Proposed: <b>${esc(p.name)}</b></span>${mine ? p.approvals.includes(S.you.seat) ? '<small>Waiting for your teammate</small>' : `<button class="btn tiny primary" data-approve="${esc(p.id)}">${icon('check')}Accept</button>` : '<small>Awaiting teammate approval</small>'}${mine ? `<button class="btn tiny ghost" data-reject="${esc(p.id)}">${p.approvals.includes(S.you.seat) ? 'Cancel' : 'Decline'}</button>` : ''}</div>` : ''}${mine ? `<form class="team-name-form" data-team-form><input aria-label="Propose a team name" maxlength="24" placeholder="Name your team" ${ready ? '' : 'disabled'}><button class="btn tiny outline" ${ready ? '' : 'disabled'}>Propose</button></form><small class="team-help">${ready ? 'Both teammates agree. Bots approve automatically.' : 'Your partner sits across, two seats away.'}</small>` : ''}</section>`;
+  }).join('');
+  $$('[data-team-form]', el).forEach((form) => form.onsubmit = (event) => { event.preventDefault(); const name = $('input', form).value.trim(); if (name) socket.emit('proposeTeamName', { name }); });
+  $$('[data-approve]', el).forEach((b) => b.onclick = () => socket.emit('respondTeamName', { id: b.dataset.approve, accept: true }));
+  $$('[data-reject]', el).forEach((b) => b.onclick = () => socket.emit('respondTeamName', { id: b.dataset.reject, accept: false }));
+}
+
+function renderHandTracker(g) {
+  const p = globalThis.rookHandProgress(g);
+  let label = 'Choose the bid. Set the pace.';
+  if (p.status === 'secured') label = `${teamName(p.team)} · Bid secured`;
+  else if (p.status === 'set') label = `${teamName(p.team)} · Set — cannot make ${p.amount}`;
+  else if (p.status === 'chasing') label = `${teamName(p.team)} · Need ${p.needed} to make ${p.amount}`;
+  const detail = p.status === 'chasing' ? `Can give up ${p.cushion} more points` : p.status === 'secured' ? `${p.points[p.team] - p.amount} above the bid` : p.status === 'set' ? 'Keep playing for the final score' : 'Captured points appear after each trick';
+  $('#handTracker').innerHTML = `<div class="hand-label"><span class="eyebrow">HAND ${g.handNo}</span><span>${g.trickNo} / 9 tricks</span></div>${[0, 1].map((t) => `<div class="hand-team t${t}"><div><span>${esc(teamName(t))}${g.bid?.team === t ? ' · bidding' : ''}</span><b>${p.points[t]}<small> pts</small></b></div><div class="points-track" role="progressbar" aria-label="${esc(teamName(t))} captured points" aria-valuemin="0" aria-valuemax="120" aria-valuenow="${p.points[t]}"><span style="width:${p.points[t] / 1.2}%"></span>${g.bid?.team === t ? `<i style="left:${g.bid.amount / 1.2}%" title="Bid ${g.bid.amount}"></i>` : ''}</div></div>`).join('')}<div class="bid-tracker ${p.status}" role="status"><strong>${esc(label)}</strong><span>${esc(detail)} · ${p.remaining} unawarded</span></div><span class="nest-note">Nest awarded on last trick</span>`;
 }
 
 function statusText(g) {
@@ -222,6 +275,7 @@ function plateHTML(seat, g) {
 
 function renderGame() {
   const g = S.game; const me = S.you.seat;
+  renderHandTracker(g); renderTeams($('#drawerTeams'));
   ensureTable();
   if (g.handNo !== lastHandNo) { lastHandNo = g.handNo; lastTrickShownNo = g.lastTrick?.no ?? 0; bidChoice = null; }
   $('#gameCode').textContent = S.room.code;
@@ -368,8 +422,8 @@ function showRecap() {
   if (over && g.settings.winRule === 'bidderMustMake') html += `<div class="note">Wins only count on a made bid.</div>`;
   const seated = S.you.seat >= 0;
   html += `<div class="modal-btns">`;
-  if (!over) html += seated ? `<button class="btn primary" id="nextHandBtn">Deal next hand</button>` : '<i>Waiting for players…</i>';
-  else { html += `<button class="btn outline" id="scBtn">Scorecard</button>`; if (S.you.isHost) html += `<button class="btn primary" id="againBtn">Play again</button><button class="btn outline" id="lobbyBtn">Lobby</button>`; else html += '<i>Waiting for host…</i>'; }
+  if (!over) html += seated ? `<button class="btn primary" id="nextHandBtn">${icon('cards')}Next hand!</button>` : '<i>Waiting for players…</i>';
+  else { html += `<button class="btn outline" id="scBtn">Scorecard</button>`; if (S.you.isHost) html += `<button class="btn primary" id="againBtn">${icon('cards')}Play again!</button><button class="btn outline" id="lobbyBtn">Lobby</button>`; else html += '<i>Waiting for host…</i>'; }
   html += `<button class="btn ghost" id="closeRecap">View table</button></div>`;
   openModal(html, over ? 'over' : 'recap');
   const nb = $('#nextHandBtn'); if (nb) nb.onclick = () => { socket.emit('nextHand'); closeModal(); };

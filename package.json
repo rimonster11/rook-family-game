@@ -5,7 +5,7 @@
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
-    "test": "node --test test/",
+    "test": "node --test test/*.test.js",
     "sim": "node src/sim.js",
     "e2e": "node scripts/e2e-socket.js"
   },

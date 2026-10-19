@@ -1,4 +1,4 @@
-// 3D table, procedural characters, card animations. Loaded dynamically; app falls back to 2D if this fails.
+// 3D table, local GLB and procedural characters, card animations.
 import * as THREE from '../vendor/three.module.min.js';
 import { charOf, drawCardFace, drawCardBack, drawFeltEmblem, CW, CH, shade } from './art.js';
 
@@ -33,93 +33,30 @@ function makeCard(card) {
   g.add(f, b); return g;
 }
 
-// ---------- characters ----------
-const sph = (r, ws = 24, hs = 16, ...a) => new THREE.SphereGeometry(r, ws, hs, ...a);
-function limb(a, b, r, material) {
-  const d = new THREE.Vector3().subVectors(b, a); const len = d.length();
-  const m = new THREE.Mesh(new THREE.CapsuleGeometry(r, Math.max(0.01, len - 2 * r), 6, 12), material);
-  m.position.copy(a).addScaledVector(d, 0.5); m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()); return m;
-}
-export function buildCharacter(idx) {
-  const c = charOf(idx); const G = new THREE.Group(); G.name = 'char';
-  const skin = mat(c.skin, { r: 0.6 }), shirt = mat(c.shirt, { r: 0.8 }), hair = mat(c.hair, { r: 0.85 }), hatM = mat(c.hatColor || '#334155', { r: 0.7 });
-  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.4, 0.55, 8, 20), shirt); torso.scale.set(1.18, 1, 0.78); torso.position.y = 0.2; G.add(torso);
-  const collar = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.05, 8, 20), mat(shade(c.shirt, -0.2))); collar.rotation.x = Math.PI / 2; collar.position.y = 0.66; G.add(collar);
-  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.15, 0.2, 14), mat(shade(c.skin, -0.1))); neck.position.y = 0.72; G.add(neck);
-  for (const s of [-1, 1]) {
-    const sh = new THREE.Vector3(0.5 * s, 0.5, 0), el = new THREE.Vector3(0.58 * s, 0.0, 0.3), hd = new THREE.Vector3(0.36 * s, -0.12, 0.8);
-    G.add(limb(sh, el, 0.13, shirt), limb(el, hd, 0.11, shirt));
-    const hand = new THREE.Mesh(sph(0.12, 14, 10), skin); hand.position.copy(hd); hand.scale.set(1, 0.7, 1.15); G.add(hand);
-  }
-  const H = new THREE.Group(); H.position.y = 1.15; G.add(H); G.userData.head = H;
-  const head = new THREE.Mesh(sph(0.42, 32, 24), skin); head.scale.set(1, 1.06, 0.98); head.castShadow = true; H.add(head);
-  for (const s of [-1, 1]) { const e = new THREE.Mesh(sph(0.08, 12, 10), mat(shade(c.skin, -0.08))); e.position.set(0.42 * s, -0.02, 0); e.scale.set(0.6, 1, 1); H.add(e); }
-  const eyeM = mat('#15151c', { r: 0.3 }), white = mat('#ffffff', { r: 0.2 });
-  for (const s of [-1, 1]) {
-    const e = new THREE.Mesh(sph(0.055, 12, 10), eyeM); e.position.set(0.15 * s, 0.03, 0.39); e.scale.set(1, 1.2, 0.6); H.add(e);
-    const hl = new THREE.Mesh(sph(0.018, 8, 6), white); hl.position.set(0.15 * s + 0.018, 0.06, 0.425); H.add(hl);
-    const ck = new THREE.Mesh(sph(0.07, 12, 8), mat('#ff7a8a', { t: 0.45 })); ck.position.set(0.25 * s, -0.12, 0.33); ck.scale.set(1, 0.6, 0.4); H.add(ck);
-  }
-  const smile = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.022, 8, 20, Math.PI), mat('#7a2e2e')); smile.rotation.z = Math.PI; smile.position.set(0, -0.14, 0.395); smile.rotation.x = -0.25; H.add(smile);
-  const nose = new THREE.Mesh(sph(0.05, 10, 8), mat(shade(c.skin, -0.06))); nose.position.set(0, -0.04, 0.42); H.add(nose);
-  // hair
-  const cap = (r = 0.45, th = 0.46, tilt = -0.35) => { const m = new THREE.Mesh(sph(r, 32, 16, 0, Math.PI * 2, 0, Math.PI * th), hair); m.rotation.x = tilt; m.position.y = 0.02; return m; };
-  const sides = (r, th) => { const m = new THREE.Mesh(sph(r, 32, 16, Math.PI / 2 + 0.95, Math.PI * 2 - 1.9, 0, Math.PI * th), hair); m.material = hair; m.material.side = THREE.DoubleSide; return m; };
-  switch (c.style) {
-    case 'short': H.add(cap()); break;
-    case 'long': { H.add(cap(0.46), sides(0.47, 0.75)); const b = new THREE.Mesh(new THREE.CapsuleGeometry(0.34, 0.35, 6, 16), hair); b.position.set(0, -0.35, -0.2); b.scale.z = 0.6; H.add(b); break; }
-    case 'bob': H.add(cap(0.46), sides(0.48, 0.62)); break;
-    case 'bun': { H.add(cap(0.455)); const b = new THREE.Mesh(sph(0.19), hair); b.position.set(0, 0.42, -0.18); H.add(b); break; }
-    case 'afro': { const a = new THREE.Mesh(sph(0.6, 28, 20), hair); a.position.set(0, 0.2, -0.24); H.add(a); break; }
-    case 'curly': for (const [x, y, z] of [[-0.3, 0.2, 0.15], [-0.15, 0.36, 0.18], [0.05, 0.4, 0.15], [0.22, 0.32, 0.17], [0.34, 0.15, 0.1], [-0.36, 0.0, -0.05], [0.37, -0.02, -0.08], [0, 0.35, -0.2], [-0.25, 0.2, -0.3], [0.25, 0.22, -0.3], [0, 0.05, -0.42]]) { const b = new THREE.Mesh(sph(0.17, 14, 10), hair); b.position.set(x, y, z); H.add(b); } break;
-    case 'spiky': { H.add(cap(0.44, 0.42)); for (let i = 0; i < 7; i++) { const k = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.28, 8), hair); const a = (i - 3) * 0.32; k.position.set(Math.sin(a) * 0.25, 0.42 - Math.abs(i - 3) * 0.04, 0.05 - Math.abs(i - 3) * 0.02); k.rotation.z = -a * 0.8; k.rotation.x = -0.3; H.add(k); } break; }
-  }
-  // hats
-  switch (c.hat) {
-    case 'beanie': { const b = new THREE.Mesh(sph(0.47, 32, 16, 0, Math.PI * 2, 0, Math.PI * 0.5), hatM); b.position.y = 0.06; b.rotation.x = -0.15; H.add(b); const r = new THREE.Mesh(new THREE.TorusGeometry(0.45, 0.07, 10, 32), mat(shade(c.hatColor, -0.25))); r.rotation.x = Math.PI / 2 - 0.15; r.position.y = 0.08; H.add(r); const p = new THREE.Mesh(sph(0.1), white); p.position.set(0, 0.55, -0.06); H.add(p); break; }
-    case 'cap': { const b = new THREE.Mesh(sph(0.46, 32, 16, 0, Math.PI * 2, 0, Math.PI * 0.45), hatM); b.position.y = 0.06; H.add(b); const v = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.03, 24, 1, false, -Math.PI / 2, Math.PI), mat(shade(c.hatColor, -0.2))); v.position.set(0, 0.14, 0.32); v.scale.z = 1.2; v.rotation.x = 0.1; H.add(v); break; }
-    case 'bowler': { const br = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 0.04, 32), hatM); br.position.y = 0.3; H.add(br); const cr = new THREE.Mesh(sph(0.38, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), hatM); cr.position.y = 0.3; H.add(cr); const band = new THREE.Mesh(new THREE.CylinderGeometry(0.385, 0.385, 0.06, 24), mat('#94a3b8')); band.position.y = 0.34; H.add(band); break; }
-    case 'tophat': { const br = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 0.04, 32), hatM); br.position.y = 0.3; H.add(br); const cr = new THREE.Mesh(new THREE.CylinderGeometry(0.33, 0.35, 0.6, 24), hatM); cr.position.y = 0.6; H.add(cr); const band = new THREE.Mesh(new THREE.CylinderGeometry(0.355, 0.355, 0.1, 24), mat('#e11d48')); band.position.y = 0.38; H.add(band); break; }
-    case 'headband': { const r = new THREE.Mesh(new THREE.TorusGeometry(0.44, 0.045, 8, 32), hatM); r.rotation.x = Math.PI / 2 - 0.2; r.position.y = 0.2; H.add(r); break; }
-    case 'cowboy': { const br = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, 0.04, 32), mat(shade(c.hatColor, -0.15))); br.position.y = 0.28; br.scale.z = 0.9; H.add(br); const cr = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.38, 0.38, 20), hatM); cr.position.y = 0.48; H.add(cr); const band = new THREE.Mesh(new THREE.CylinderGeometry(0.375, 0.38, 0.06, 20), mat('#1f2937')); band.position.y = 0.33; H.add(band); break; }
-  }
-  // glasses
-  if (c.glasses) {
-    const shades = c.glasses === 'shades';
-    const fm = mat(c.glasses === 'square' ? '#1e3a8a' : '#1f2937', { r: 0.4, m: 0.3 });
-    for (const s of [-1, 1]) {
-      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.105, 0.018, 8, c.glasses === 'round' ? 24 : 4), fm); ring.position.set(0.15 * s, 0.03, 0.43); if (c.glasses !== 'round') { ring.rotation.z = Math.PI / 4; ring.scale.set(1.15, 0.85, 1); }
-      H.add(ring);
-      if (shades) { const l = new THREE.Mesh(new THREE.CircleGeometry(0.105, 4), mat('#0f172a', { r: 0.2, m: 0.5 })); l.rotation.z = Math.PI / 4; l.scale.set(1.15, 0.85, 1); l.position.set(0.15 * s, 0.03, 0.432); H.add(l); }
-    }
-    const br = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.09, 6), fm); br.rotation.z = Math.PI / 2; br.position.set(0, 0.04, 0.44); H.add(br);
-  }
-  if (c.extra === 'beard') { const b = new THREE.Mesh(sph(0.4, 24, 16, 0, Math.PI * 2, Math.PI * 0.55, Math.PI * 0.45), hair); b.position.set(0, 0.02, 0.06); H.add(b); smile.position.z = 0.43; smile.material = white; }
-  if (c.extra === 'mustache') { const m = new THREE.Mesh(new THREE.CapsuleGeometry(0.035, 0.16, 4, 10), hair); m.rotation.z = Math.PI / 2; m.position.set(0, -0.09, 0.41); H.add(m); }
-  if (c.extra === 'earrings') for (const s of [-1, 1]) { const e = new THREE.Mesh(sph(0.035, 10, 8), mat('#e5e7eb', { m: 0.8, r: 0.25 })); e.position.set(0.43 * s, -0.12, 0.02); H.add(e); }
-  if (c.extra === 'bowtie') for (const s of [-1, 1]) { const b = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.16, 4), mat('#e11d48')); b.rotation.z = (Math.PI / 2) * s; b.position.set(0.08 * s, 0.62, 0.3); H.parent.add(b); }
-  G.traverse((o) => { if (o.isMesh) o.castShadow = true; });
-  return G;
-}
+// Character geometry is shared by the preview and table.
+export { buildCharacter } from './characters.js';
+import { buildCharacter, disposeCharacter, animateCharacter } from './characters.js';
+const motionPreference = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;
+const reducedMotion = () => !!motionPreference?.matches;
 
 // ---------- preview (sign-in) ----------
 export function createPreview(canvas) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
-  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.15;
   const scene = new THREE.Scene();
-  const cam = new THREE.PerspectiveCamera(30, 1, 0.1, 50); cam.position.set(0, 1.25, 5.3); cam.lookAt(0, 0.8, 0);
-  scene.add(new THREE.HemisphereLight('#dbe7ff', '#0b1a3a', 1.6));
-  const key = new THREE.DirectionalLight('#ffffff', 2.2); key.position.set(2, 4, 4); scene.add(key);
+  const cam = new THREE.PerspectiveCamera(30, 1, 0.1, 50); cam.position.set(0, 1.10, 4.65); cam.lookAt(0, 0.75, 0);
+  scene.add(new THREE.HemisphereLight('#fff3e4', '#506491', 2.0));
+  const key = new THREE.DirectionalLight('#fff0dd', 3.0); key.position.set(2, 4, 4); scene.add(key);
   const rim = new THREE.DirectionalLight('#7fb2ff', 1.6); rim.position.set(-3, 2, -3); scene.add(rim);
   const base = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.2, 0.12, 48), mat('#123a9c', { r: 0.5 })); base.position.y = -0.45; scene.add(base);
   const baseRing = new THREE.Mesh(new THREE.TorusGeometry(1.15, 0.025, 8, 64), mat('#ffffff', { e: '#9cc8ff', ei: 0.6 })); baseRing.rotation.x = Math.PI / 2; baseRing.position.y = -0.39; scene.add(baseRing);
   let ch = null, raf = 0, t0 = performance.now(), spin = 0, alive = true;
-  const set = (i) => { if (ch) scene.remove(ch); ch = buildCharacter(i); ch.position.y = -0.3; scene.add(ch); t0 = performance.now(); };
+  const set = (i, appearance) => { if (ch) { scene.remove(ch); disposeCharacter(ch); } ch = buildCharacter(i, appearance); ch.position.y = ch.userData.modelCharacter ? .06 : -.3; scene.add(ch); t0 = performance.now(); };
   const resize = () => { const w = canvas.clientWidth || 300, h = canvas.clientHeight || 300; renderer.setSize(w, h, false); cam.aspect = w / h; cam.updateProjectionMatrix(); };
-  const loop = (t) => { if (!alive) return; raf = requestAnimationFrame(loop); if (document.hidden) return; const k = (t - t0) / 1000; spin += 0.004; if (ch) { ch.rotation.y = Math.sin(spin * 2) * 0.55; ch.position.y = -0.3 + Math.sin(k * 2.2) * 0.02; if (k < 0.5) { const s = 0.8 + 0.2 * (1 - Math.pow(1 - k / 0.5, 3)); ch.scale.setScalar(s); } else ch.scale.setScalar(1); } renderer.render(scene, cam); };
+  const loop = (t) => { if (!alive) return; raf = requestAnimationFrame(loop); if (document.hidden) return; const k = (t - t0) / 1000; spin += 0.004; if (ch) { animateCharacter(ch, t / 1000, false, reducedMotion()); ch.rotation.y = reducedMotion() ? 0 : Math.sin(spin * 2) * 0.30; ch.position.y = (ch.userData.modelCharacter ? .06 : -.3) + (reducedMotion() ? 0 : Math.sin(k * 2.2) * 0.02); if (k < 0.5 && !reducedMotion()) { const s = 0.8 + 0.2 * (1 - Math.pow(1 - k / 0.5, 3)); ch.scale.setScalar(s); } else ch.scale.setScalar(1); } renderer.render(scene, cam); };
   resize(); const ro = new ResizeObserver(resize); ro.observe(canvas); raf = requestAnimationFrame(loop);
-  return { set, resize, dispose() { alive = false; cancelAnimationFrame(raf); ro.disconnect(); renderer.dispose(); } };
+  return { set, resize, dispose() { alive = false; cancelAnimationFrame(raf); ro.disconnect(); disposeCharacter(ch); base.geometry.dispose(); baseRing.geometry.dispose(); renderer.dispose(); } };
 }
 
 // ---------- table ----------
@@ -141,17 +78,25 @@ export function createTable(container, { quality = 'high', onFps } = {}) {
   const spot = new THREE.SpotLight('#ffffff', 70, 26, 0.8, 0.65, 1.5); spot.position.set(0.5, 9, 1.5); spot.target.position.set(0, 0, 0); spot.castShadow = hi;
   spot.shadow.mapSize.set(1024, 1024); spot.shadow.bias = -0.0004; spot.shadow.radius = 4; scene.add(spot, spot.target);
   const fill = new THREE.DirectionalLight('#8fb6ff', 0.6); fill.position.set(-6, 5, 6); scene.add(fill);
+  const warmRim = new THREE.DirectionalLight('#f7d3a0', 1.1); warmRim.position.set(4, 5, -5); scene.add(warmRim);
 
   // floor
   const floorTex = canvasTex((ctx, S) => { const g = ctx.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2); g.addColorStop(0, '#173a85'); g.addColorStop(0.55, '#0a1d4d'); g.addColorStop(1, '#061232'); ctx.fillStyle = g; ctx.fillRect(0, 0, S, S); }, 512, 512);
   const floor = new THREE.Mesh(new THREE.CircleGeometry(30, 48), new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.95 })); floor.rotation.x = -Math.PI / 2; floor.position.y = -2.6; floor.receiveShadow = hi; scene.add(floor);
   // table
   const R = 3.3;
-  const wood = new THREE.MeshStandardMaterial({ color: '#3b2416', roughness: 0.42, metalness: 0.05 });
+  const woodGrain = canvasTex((ctx, S) => {
+    ctx.fillStyle = '#785034'; ctx.fillRect(0, 0, S, S);
+    for (let y = 0; y < S; y += 3) {
+      ctx.strokeStyle = y % 9 === 0 ? '#37271955' : '#d8a76a33'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.bezierCurveTo(S * .3, y + Math.sin(y) * 12, S * .7, y - 8, S, y + 4); ctx.stroke();
+    }
+  }, 512, 512);
+  const wood = new THREE.MeshStandardMaterial({ map: woodGrain, roughness: 0.38, metalness: 0.05 });
   const feltTex = canvasTex((ctx, S) => { const g = ctx.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2); g.addColorStop(0, '#1d4fc4'); g.addColorStop(0.7, '#123a9c'); g.addColorStop(1, '#0b2a78'); ctx.fillStyle = g; ctx.fillRect(0, 0, S, S); const n = ctx.getImageData(0, 0, S, S); for (let i = 0; i < n.data.length; i += 4) { const v = (Math.random() - 0.5) * 10; n.data[i] += v; n.data[i + 1] += v; n.data[i + 2] += v; } ctx.putImageData(n, 0, 0); drawFeltEmblem(ctx, S); }, 1024, 1024);
   const felt = new THREE.Mesh(new THREE.CircleGeometry(R, 72), new THREE.MeshStandardMaterial({ map: feltTex, roughness: 0.95 })); felt.rotation.x = -Math.PI / 2; felt.receiveShadow = true; scene.add(felt);
   const rim = new THREE.Mesh(new THREE.TorusGeometry(R + 0.12, 0.2, 20, 96), wood); rim.rotation.x = Math.PI / 2; rim.position.y = 0.02; rim.castShadow = hi; rim.receiveShadow = hi; scene.add(rim);
-  const inlay = new THREE.Mesh(new THREE.TorusGeometry(R - 0.12, 0.012, 6, 96), new THREE.MeshStandardMaterial({ color: '#dfe7f5', roughness: 0.3, metalness: 0.6 })); inlay.rotation.x = Math.PI / 2; inlay.position.y = 0.006; scene.add(inlay);
+  const inlay = new THREE.Mesh(new THREE.TorusGeometry(R - 0.12, 0.018, 6, 96), new THREE.MeshStandardMaterial({ color: '#edc581', roughness: 0.3, metalness: 0.6 })); inlay.rotation.x = Math.PI / 2; inlay.position.y = 0.006; scene.add(inlay);
   const apron = new THREE.Mesh(new THREE.CylinderGeometry(R + 0.2, R - 0.1, 0.45, 72, 1, true), wood); apron.position.y = -0.24; scene.add(apron);
   const ped = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.8, 2.2, 32), wood); ped.position.y = -1.5; scene.add(ped);
   const foot = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.6, 0.18, 40), wood); foot.position.y = -2.52; foot.receiveShadow = hi; scene.add(foot);
@@ -227,9 +172,10 @@ export function createTable(container, { quality = 'high', onFps } = {}) {
 
   function setSeatChar(s, seatInfo, team) {
     const idx = seatInfo ? seatInfo.character ?? 0 : -1;
-    if (s.pos === 'bottom') { if (s.ch) { s.grp.remove(s.ch); s.ch = null; } s.charIdx = idx; s.chair.visible = false; return; }
+    if (s.pos === 'bottom') { if (s.ch) { s.grp.remove(s.ch); disposeCharacter(s.ch); s.ch = null; } s.charIdx = idx; s.chair.visible = false; return; }
     s.chair.visible = true;
-    if (s.charIdx !== idx) { if (s.ch) s.grp.remove(s.ch); s.ch = idx >= 0 ? buildCharacter(idx) : null; if (s.ch) { s.ch.position.set(0, 0.15, 0.05); s.grp.add(s.ch); } s.charIdx = idx; }
+    const lookKey = JSON.stringify([idx, seatInfo?.appearance || {}]);
+    if (s.lookKey !== lookKey) { if (s.ch) { s.grp.remove(s.ch); disposeCharacter(s.ch); } s.ch = idx >= 0 ? buildCharacter(idx, seatInfo.appearance) : null; if (s.ch) { s.ch.position.set(0, 0.15, 0.05); s.grp.add(s.ch); } s.charIdx = idx; s.lookKey = lookKey; }
     s.trim.material.color.set(TEAM_HEX[team]); s.trim.material.emissive.set(TEAM_HEX[team]);
   }
   function setFan(s, n) {
@@ -272,7 +218,7 @@ export function createTable(container, { quality = 'high', onFps } = {}) {
     }
     for (const s of seats) {
       const on = s.pos === turnPos; s.ring.material.opacity += ((on ? 0.55 + 0.3 * Math.sin(k * 4) : 0) - s.ring.material.opacity) * Math.min(1, dt * 8);
-      if (s.ch) { s.ch.position.y = 0.15 + Math.sin(k * 1.6 + s.dir.x * 2 + s.dir.z) * 0.015 + (on ? Math.abs(Math.sin(k * 3)) * 0.04 : 0); const h = s.ch.userData.head; if (h) { h.rotation.y = on ? Math.sin(k * 1.3) * 0.12 : Math.sin(k * 0.5 + s.dir.x) * 0.06; h.rotation.x = on ? -0.12 : 0; } }
+      if (s.ch) { s.ch.position.y = 0.15 + (reducedMotion() ? 0 : Math.sin(k * 1.6 + s.dir.x * 2 + s.dir.z) * 0.015 + (on ? Math.abs(Math.sin(k * 3)) * 0.04 : 0)); animateCharacter(s.ch, k, on, reducedMotion()); }
       const el = plateEls[s.pos];
       if (el && s.pos !== 'bottom') { v.copy(s.anchor).project(cam); const x = (v.x * 0.5 + 0.5) * W, y = (-v.y * 0.5 + 0.5) * Hh; const ew = el._w || 120, eh = el._h || 48; const cx = Math.min(W - ew / 2 - 6, Math.max(ew / 2 + 6, x)), cy = Math.min(Hh - 60, Math.max(eh + 30, y)); el.style.transform = `translate(${cx.toFixed(1)}px, ${cy.toFixed(1)}px) translate(-50%, -100%)`; }
     }
