@@ -24,6 +24,10 @@ function makeCode() {
   do { c = Array.from({ length: 4 }, () => A[crypto.randomInt(A.length)]).join(''); } while (rooms.has(c));
   return c;
 }
+const N_CHARS = 12;
+const cleanChar = (c) => { const v = Math.floor(Number(c)); return Number.isFinite(v) && v >= 0 && v < N_CHARS ? v : 0; };
+const randChar = (room) => { const used = new Set(room.seats.filter(Boolean).map((s) => s.character)); const free = [...Array(N_CHARS).keys()].filter((i) => !used.has(i)); return free.length ? free[crypto.randomInt(free.length)] : crypto.randomInt(N_CHARS); };
+const makeBot = (room) => ({ type: 'bot', name: pickBotName(room), character: randChar(room) });
 const clean = (s, n = 20) => String(s ?? '').replace(/[<>]/g, '').trim().slice(0, n);
 
 function pickBotName(room) {
@@ -49,7 +53,7 @@ function seatOf(room, playerId) { return room.seats.findIndex((s) => s && s.type
 function publicRoom(room) {
   return {
     code: room.code, hostId: room.hostPublic, settings: room.settings, started: !!room.game,
-    seats: room.seats.map((s) => s && { type: s.type, name: s.name, connected: s.type === 'bot' || s.connected, isHost: s.playerId === room.hostId }),
+    seats: room.seats.map((s) => s && { type: s.type, name: s.name, character: s.character ?? 0, connected: s.type === 'bot' || s.connected, isHost: s.playerId === room.hostId }),
     spectators: [...room.members.values()].filter((m) => seatOf(room, m.playerId) < 0).map((m) => m.name),
     chat: room.chat.slice(-50),
   };
@@ -94,40 +98,40 @@ function sysChat(room, text) { room.chat.push({ from: null, text, t: Date.now() 
 io.on('connection', (socket) => {
   let room = null, me = null;
   const fail = (msg) => socket.emit('errorMsg', msg);
-  const attach = (r, playerId, name) => {
+  const attach = (r, playerId, name, character) => {
     room = r;
     me = r.members.get(playerId);
-    if (!me) { me = { playerId, name, socketId: socket.id }; r.members.set(playerId, me); }
-    me.socketId = socket.id; if (name) me.name = name;
-    const s = seatOf(r, playerId); if (s >= 0) { r.seats[s].connected = true; r.seats[s].name = me.name; }
+    if (!me) { me = { playerId, name, socketId: socket.id, character: character ?? 0 }; r.members.set(playerId, me); }
+    me.socketId = socket.id; if (name) me.name = name; if (character !== undefined) me.character = character;
+    const s = seatOf(r, playerId); if (s >= 0) { r.seats[s].connected = true; r.seats[s].name = me.name; r.seats[s].character = me.character; }
     socket.join(r.code);
     broadcast(r);
   };
 
-  socket.on('hello', ({ playerId, code } = {}) => {
+  socket.on('hello', ({ playerId, code, character } = {}) => {
     const r = rooms.get(String(code || '').toUpperCase());
-    if (r && r.members.has(playerId)) attach(r, playerId, r.members.get(playerId).name);
+    if (r && r.members.has(playerId)) attach(r, playerId, r.members.get(playerId).name, character === undefined ? undefined : cleanChar(character));
     else socket.emit('noRoom');
   });
 
-  socket.on('createRoom', ({ name, playerId } = {}) => {
-    name = clean(name) || 'Player'; playerId = clean(playerId, 64) || crypto.randomUUID();
+  socket.on('createRoom', ({ name, playerId, character } = {}) => {
+    name = clean(name) || 'Player'; character = cleanChar(character); playerId = clean(playerId, 64) || crypto.randomUUID();
     const code = makeCode();
     const r = { code, hostId: playerId, hostPublic: crypto.randomUUID(), settings: { ...E.DEFAULT_SETTINGS }, seats: [null, null, null, null], members: new Map(), chat: [], game: null, botTimer: null, created: Date.now() };
     rooms.set(code, r);
-    r.seats[0] = { type: 'human', playerId, name, connected: true };
+    r.seats[0] = { type: 'human', playerId, name, character, connected: true };
     sysChat(r, `${name} created the table.`);
-    attach(r, playerId, name);
+    attach(r, playerId, name, character);
   });
 
-  socket.on('joinRoom', ({ name, playerId, code } = {}) => {
+  socket.on('joinRoom', ({ name, playerId, code, character } = {}) => {
     const r = rooms.get(String(code || '').toUpperCase().trim());
     if (!r) return fail('No table with that code.');
-    name = clean(name) || 'Player'; playerId = clean(playerId, 64) || crypto.randomUUID();
+    name = clean(name) || 'Player'; playerId = clean(playerId, 64) || crypto.randomUUID(); character = cleanChar(character);
     const isNew = !r.members.has(playerId);
-    if (isNew && !r.game) { const free = r.seats.findIndex((s) => !s); if (free >= 0) r.seats[free] = { type: 'human', playerId, name, connected: true }; }
+    if (isNew && !r.game) { const free = r.seats.findIndex((s) => !s); if (free >= 0) r.seats[free] = { type: 'human', playerId, name, character, connected: true }; }
     if (isNew) sysChat(r, `${name} joined.`);
-    attach(r, playerId, name);
+    attach(r, playerId, name, character);
   });
 
   const guard = (fn) => (data = {}) => { if (!room || !me) return fail('Not in a room'); const r0 = room; try { fn(data); if (room) broadcast(room); else if (r0) broadcast(r0); } catch (e) { if (e instanceof E.RuleError) fail(e.message); else { console.error(e); fail('Server error'); } } };
@@ -139,13 +143,14 @@ io.on('connection', (socket) => {
     const cur = mySeat();
     const target = room.seats[seat];
     if (room.game && cur < 0 && target && target.type === 'bot') { // take over a bot mid-game
-      room.seats[seat] = { type: 'human', playerId: me.playerId, name: me.name, connected: true }; sysChat(room, `${me.name} took over seat ${seat + 1}.`); return;
+      room.seats[seat] = { type: 'human', playerId: me.playerId, name: me.name, character: me.character ?? 0, connected: true }; sysChat(room, `${me.name} took over seat ${seat + 1}.`); return;
     }
     if (room.game) return fail('Game in progress - seats are locked');
     if (target && target.type === 'human') return fail('Seat taken');
     if (cur >= 0) room.seats[cur] = null;
-    room.seats[seat] = { type: 'human', playerId: me.playerId, name: me.name, connected: true };
+    room.seats[seat] = { type: 'human', playerId: me.playerId, name: me.name, character: me.character ?? 0, connected: true };
   }));
+  socket.on('setCharacter', guard(({ character }) => { me.character = cleanChar(character); const c = mySeat(); if (c >= 0) room.seats[c].character = me.character; }));
   socket.on('stand', guard(() => { if (room.game) return fail('Game in progress'); const c = mySeat(); if (c >= 0) room.seats[c] = null; }));
   socket.on('addBot', guard(({ seat }) => {
     if (!isHost()) return fail('Only the host can add bots');
@@ -153,9 +158,9 @@ io.on('connection', (socket) => {
     const t = room.seats[seat];
     if (t && t.type === 'human' && (!room.game || t.connected)) return fail('Seat taken');
     if (t && t.type === 'human') sysChat(room, `${t.name} was replaced by a bot.`);
-    room.seats[seat] = { type: 'bot', name: pickBotName(room) };
+    room.seats[seat] = makeBot(room);
   }));
-  socket.on('fillBots', guard(() => { if (!isHost()) return; for (let i = 0; i < 4; i++) if (!room.seats[i]) room.seats[i] = { type: 'bot', name: pickBotName(room) }; }));
+  socket.on('fillBots', guard(() => { if (!isHost()) return; for (let i = 0; i < 4; i++) if (!room.seats[i]) room.seats[i] = makeBot(room); }));
   socket.on('clearSeat', guard(({ seat }) => { if (!isHost() || room.game) return; if (room.seats[seat]?.type === 'bot') room.seats[seat] = null; }));
   socket.on('settings', guard((s) => { if (!isHost()) return fail('Only the host can change settings'); if (room.game && room.game.phase !== 'gameOver') return fail('Settings are locked during a game'); room.settings = sanitizeSettings(s, room.settings); }));
   socket.on('start', guard(() => {
@@ -174,7 +179,7 @@ io.on('connection', (socket) => {
   socket.on('chat', guard(({ text }) => { text = clean(text, 200); if (text) { room.chat.push({ from: me.name, text, t: Date.now() }); if (room.chat.length > 100) room.chat.shift(); } }));
   socket.on('leave', guard(() => {
     const c = mySeat();
-    if (c >= 0) { if (room.game) room.seats[c] = { type: 'bot', name: pickBotName(room) }; else room.seats[c] = null; }
+    if (c >= 0) { if (room.game) room.seats[c] = makeBot(room); else room.seats[c] = null; }
     room.members.delete(me.playerId); sysChat(room, `${me.name} left.`);
     if (me.playerId === room.hostId) { const next = [...room.members.values()][0]; if (next) room.hostId = next.playerId; }
     socket.leave(room.code); const r = room; room = null; me = null; broadcast(r);

@@ -4,97 +4,120 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Rook Night</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🐦</text></svg>">
+<meta name="description" content="Play Rook online with family and friends — a 3D card table in your browser.">
+<meta name="theme-color" content="#0a1f5c">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="stylesheet" href="style.css">
+<link rel="modulepreload" href="js/art.js">
 </head>
 <body>
 <div id="app">
-  <!-- HOME -->
+  <!-- HOME / SIGN-IN -->
   <section id="home" class="screen">
-    <div class="home-card">
-      <div class="logo">🐦 <span>Rook Night</span></div>
-      <p class="tag">Pull up a chair. Cards, cocoa, and friendly trash talk.</p>
-      <label>Your name<input id="nameInput" maxlength="20" placeholder="e.g. Grandma Jo" autocomplete="nickname"></label>
-      <button id="createBtn" class="btn primary big">Start a new table</button>
-      <div class="or">or join friends</div>
-      <div class="row">
-        <input id="codeInput" maxlength="4" placeholder="CODE" autocapitalize="characters" class="code-input">
-        <button id="joinBtn" class="btn">Join</button>
+    <div class="home-bg" aria-hidden="true"></div>
+    <div class="home-wrap">
+      <div class="hero">
+        <div class="logo"><span class="logo-bird" id="logoBird"></span><div><div class="wordmark">ROOK</div><div class="sub">NIGHT · FAMILY CARD TABLE</div></div></div>
+        <p class="tag">Bid, bury the nest, call trump — play classic Rook with family and friends at a 3D table.</p>
+        <div class="hero-cards" id="heroCards" aria-hidden="true"></div>
       </div>
-      <p class="fine">House rules: 41-card deck (5–14 + Rook), 9 cards each, 5 in the nest, play to 500.</p>
+      <div class="signin panel glass">
+        <div class="step-title"><span class="stepn">1</span> Your name</div>
+        <input id="nameInput" maxlength="20" placeholder="e.g. Grandma Jo" autocomplete="nickname" aria-label="Your name">
+        <div class="step-title"><span class="stepn">2</span> Pick your character <span class="char-label" id="charLabel"></span></div>
+        <div class="char-select">
+          <div class="char-preview" id="charPreview"><canvas id="previewCanvas"></canvas><div class="preview-2d" id="preview2d"></div>
+            <button class="arrow left" id="charPrev" aria-label="Previous character">‹</button><button class="arrow right" id="charNext" aria-label="Next character">›</button></div>
+          <div class="char-grid" id="charGrid" role="listbox" aria-label="Characters"></div>
+        </div>
+        <div class="step-title"><span class="stepn">3</span> Play</div>
+        <button id="createBtn" class="btn primary big">Start a new table</button>
+        <div class="join-row">
+          <input id="codeInput" maxlength="4" placeholder="CODE" autocapitalize="characters" class="code-input" aria-label="Table code">
+          <button id="joinBtn" class="btn outline">Join table</button>
+        </div>
+        <p class="fine">Family rules: 41-card deck (5–14 + Rook) · 9 cards each · 5 in the nest · play to 500</p>
+        <button id="installBtn" class="btn ghost tiny hidden">⬇ Install app</button>
+      </div>
     </div>
   </section>
 
   <!-- LOBBY -->
   <section id="lobby" class="screen hidden">
     <header class="topbar">
-      <div class="brand">🐦 Rook Night</div>
-      <div class="roomcode">Table <b id="lobbyCode"></b> <button id="copyLink" class="btn tiny">Copy invite link</button></div>
-      <button id="leaveBtn" class="btn tiny ghost">Leave</button>
+      <div class="brand"><span class="mini-bird"></span><span>Rook Night</span></div>
+      <div class="roomcode"><span class="lbl">TABLE</span><b id="lobbyCode"></b><button id="copyLink" class="btn tiny outline"><span class="hide-sm">Copy invite link</span><span class="show-sm">Invite</span></button></div>
+      <div class="top-btns"><button id="lobbyCharBtn" class="btn tiny ghost">Character</button><button id="leaveBtn" class="btn tiny ghost">Leave</button></div>
     </header>
     <div class="lobby-wrap">
-      <div class="lobby-table table-wood">
-        <div class="decor mug">☕</div><div class="decor snacks">🍪</div>
+      <div class="lobby-main panel glass">
+        <div class="lobby-head"><h2>Seats</h2><div class="teams-note"><span class="tdot t0"></span>Team 1 sits across · <span class="tdot t1"></span>Team 2 sits across</div></div>
         <div id="lobbySeats" class="lobby-seats"></div>
-        <div class="lobby-center">
-          <div class="teams-note"><span class="t0">Team 1</span> sits across from each other, so does <span class="t1">Team 2</span></div>
-          <div class="lobby-actions">
-            <button id="fillBotsBtn" class="btn">Fill empty seats with bots</button>
-            <button id="startBtn" class="btn primary">Deal 'em!</button>
-          </div>
-          <div id="lobbyHint" class="hint"></div>
+        <div class="lobby-actions">
+          <button id="fillBotsBtn" class="btn outline">Fill empty seats with bots</button>
+          <button id="startBtn" class="btn primary">Deal the cards</button>
         </div>
+        <div id="lobbyHint" class="hint"></div>
       </div>
       <aside class="side">
-        <details class="panel" open>
+        <details class="panel glass" open>
           <summary>House rules &amp; settings</summary>
           <form id="settingsForm" class="settings"></form>
         </details>
-        <div class="panel chat-panel"><div class="panel-title">Table talk</div><div class="chat-log" data-chat></div>
-          <form class="chat-form" data-chatform><input maxlength="200" placeholder="Say something nice…"><button class="btn tiny">Send</button></form></div>
+        <div class="panel glass chat-panel"><div class="panel-title">Table talk</div><div class="chat-log" data-chat></div>
+          <form class="chat-form" data-chatform><input maxlength="200" placeholder="Say something nice…" aria-label="Chat message"><button class="btn tiny primary">Send</button></form></div>
       </aside>
     </div>
   </section>
 
   <!-- GAME -->
   <section id="game" class="screen hidden">
-    <header class="topbar">
-      <div class="brand">🐦 <span class="hide-sm">Rook Night</span> <small id="gameCode"></small></div>
+    <header class="topbar game-top">
+      <div class="brand"><span class="mini-bird"></span><span class="hide-sm">Rook Night</span> <small id="gameCode"></small></div>
       <div class="scoreboard" id="scoreboard"></div>
       <div class="top-btns">
-        <button id="scoreBtn" class="btn tiny ghost" title="Scorecard">📋</button>
-        <button id="chatToggle" class="btn tiny ghost" title="Chat">💬<span id="chatBadge" class="badge hidden"></span></button>
+        <button id="scoreBtn" class="btn icon ghost" title="Scorecard" aria-label="Scorecard"><svg viewBox="0 0 24 24"><path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+        <button id="chatToggle" class="btn icon ghost" title="Chat & menu" aria-label="Chat and menu"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg><span id="chatBadge" class="badge hidden"></span></button>
       </div>
     </header>
     <div class="game-wrap">
-      <div class="table-area">
-        <div class="table table-wood" id="table">
-          <div class="decor mug">☕</div><div class="decor snacks">🥨</div><div class="decor lamp"></div>
-          <div class="seat pos-top" id="seat-top"></div>
-          <div class="seat pos-left" id="seat-left"></div>
-          <div class="seat pos-right" id="seat-right"></div>
-          <div class="seat pos-bottom" id="seat-bottom"></div>
-          <div class="center" id="center"></div>
-          <div class="status" id="status"></div>
-        </div>
+      <div class="table-area" id="tableArea">
+        <div class="table2d" id="table2d"><div class="felt"><div class="felt-bird"></div></div></div>
+        <div class="seat pos-top" id="seat-top"></div>
+        <div class="seat pos-left" id="seat-left"></div>
+        <div class="seat pos-right" id="seat-right"></div>
+        <div class="seat pos-bottom" id="seat-bottom"></div>
+        <div class="center" id="center"></div>
+        <div class="banner" id="banner"></div>
+        <div class="trumpbadge hidden" id="trumpBadge"></div>
+        <div class="status" id="status"></div>
       </div>
       <div class="action" id="action"></div>
-      <div class="hand" id="hand"></div>
+      <div class="hand-wrap"><div class="hand" id="hand"></div></div>
     </div>
     <aside class="drawer" id="drawer">
-      <div class="drawer-head"><b>Table talk</b><button class="btn tiny ghost" id="closeDrawer">✕</button></div>
+      <div class="drawer-head"><b>Table talk</b><button class="btn icon ghost" id="closeDrawer" aria-label="Close">✕</button></div>
       <div class="chat-log" data-chat></div>
-      <form class="chat-form" data-chatform><input maxlength="200" placeholder="Nice play, partner…"><button class="btn tiny">Send</button></form>
+      <form class="chat-form" data-chatform><input maxlength="200" placeholder="Nice play, partner…" aria-label="Chat message"><button class="btn tiny primary">Send</button></form>
+      <div class="panel-title">Graphics</div>
+      <div class="seg" id="gfxSeg"><button data-gfx="high">3D High</button><button data-gfx="low">3D Lite</button><button data-gfx="2d">2D</button></div>
       <div class="panel-title">What happened</div>
       <div class="log" id="log"></div>
       <div class="host-tools" id="hostTools"></div>
+      <div class="drawer-foot"><button class="btn tiny outline" id="drawerInvite">Copy invite link</button><button class="btn tiny ghost" id="drawerLeave">Leave table</button></div>
     </aside>
   </section>
 
   <div id="modal" class="modal hidden"><div class="modal-card" id="modalCard"></div></div>
-  <div id="toast" class="toast hidden"></div>
+  <div id="toast" class="toast hidden" role="status"></div>
+  <div id="conn" class="conn hidden">Reconnecting…</div>
 </div>
 <script src="/socket.io/socket.io.js"></script>
-<script src="app.js"></script>
+<script type="module" src="js/app.js"></script>
+<noscript>Rook Night needs JavaScript.</noscript>
 </body>
 </html>

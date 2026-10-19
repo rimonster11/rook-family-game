@@ -62,3 +62,10 @@ To share over the internet without hosting: `cloudflared tunnel --url http://loc
 - Identity is a random id in localStorage — reconnect works in the same browser only; no accounts/passwords. Anyone with the code can join/spectate.
 - Bots are simple heuristics (decent, not expert). No misdeal/redeal for counter-less hands, no renege penalties (illegal plays are blocked instead), no "shoot the moon".
 - Single process; not designed for horizontal scaling.
+
+## Look & feel (v2)
+- Classic blue Rook theme: navy/royal blue with white accents, custom SVG rook-bird emblem, Rook-style cards (red/black/green/yellow + the blue Rook card) and blue card backs.
+- 3D table (Three.js r169, vendored at `public/vendor/three.module.min.js`, no CDN): wood rim, blue felt, soft spotlight shadows, camera from your seat. Played cards fly to the center in 3D and are swept to the trick winner.
+- Characters: 12 procedural characters (`public/js/art.js` specs, `public/js/three3d.js` models). Pick one on sign-in; stored in localStorage and synced via the server (`character` on create/join/hello, `setCharacter` event). Bots get random characters.
+- Graphics menu (chat drawer): 3D High / 3D Lite / 2D. Phones default to Lite; no-WebGL devices fall back to 2D automatically. Add `?gfx=2d` to force 2D.
+- Installable PWA: `manifest.webmanifest`, `sw.js` (network-first, offline shell), icons in `public/icons/`.
