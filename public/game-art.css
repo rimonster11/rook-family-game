@@ -50,3 +50,22 @@ input::placeholder{color:#b7cee3;opacity:.8}input:focus,select:focus{border-colo
 .model-look{display:grid;gap:4px;padding:14px 16px;border:1px solid #e6bb6b66;border-radius:14px;background:#10294f;color:#f6dc9e}
 .model-look strong{font-family:"Rook Display",sans-serif;font-size:23px}
 .model-look span{font-size:13px;color:#c3d2e9}
+/* Character studio: one everyday avatar and one special, with four small drawers. */
+#charGrid.character-types,.k-char .modal-grid.character-types{grid-template-columns:1fr;align-content:center;gap:12px}
+.character-types .char-opt{padding:10px 8px;border-radius:18px}
+.character-types .char-opt svg{width:76px;height:76px}
+.character-types .char-opt>span{font-family:var(--display);font-size:19px}
+.character-types .char-opt small{font-size:11px;color:var(--muted);font-weight:600}
+.look-tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin:14px 0}
+.look-tabs button{display:flex;align-items:center;justify-content:center;gap:5px;border:1px solid #acc9e533;border-radius:12px;background:#0b2747;color:#c8daec;padding:9px 4px;cursor:pointer;font:18px var(--display)}
+.look-tabs button[aria-pressed=true]{background:#e5c487;color:#263a50;border-color:#ffe4aa;box-shadow:0 3px 0 #8e6b3b}
+.look-tabs .ui-art{width:23px;height:23px}
+.style-choices .style-choice:not(.swatch){width:75px;min-height:82px;border-radius:13px;padding:5px 3px}
+.style-choices .style-choice svg{width:49px;height:49px}
+.style-choices .style-choice>span:last-child{font-size:11px;white-space:normal;line-height:1.2}
+.style-choices.palette-choices{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.style-choices .palette-choice:not(.swatch){width:100%;min-height:64px;display:grid;gap:6px;justify-items:center}
+.palette-stripes{display:flex;overflow:hidden;width:90%;height:25px;border-radius:7px;border:1px solid #ffffff22}
+.palette-stripes i{flex:1}.palette-stripes i:first-child{flex:2}
+.look-tabs button:focus-visible,.style-choice:focus-visible,.char-opt:focus-visible{outline:3px solid #ffe4aa;outline-offset:3px}
+@media(max-width:640px){.character-types .char-opt svg{width:58px;height:58px}.character-types .char-opt>span{font-size:16px}.character-types .char-opt small{font-size:10px}.character-types .char-opt{padding:7px 3px}.look-tabs button{font-size:16px;flex-direction:column;gap:3px}.style-choices .style-choice:not(.swatch){width:65px;min-height:76px}.style-choices .palette-choice:not(.swatch){width:100%;min-height:62px}}

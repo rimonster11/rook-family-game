@@ -70,7 +70,7 @@ To share over the internet without hosting: `cloudflared tunnel --url http://loc
 ## Look & feel (v2)
 - Classic blue Rook theme: navy/royal blue with white accents, custom SVG rook-bird emblem, Rook-style cards (red/black/green/yellow + the blue Rook card) and blue card backs.
 - 3D table (Three.js r169, vendored at `public/vendor/three.module.min.js`, no CDN): wood rim, blue felt, soft spotlight shadows, camera from your seat. Played cards fly to the center in 3D and are swept to the trick winner.
-- Characters: 12 procedural characters (`public/js/art.js` specs, `public/js/three3d.js` models). Pick one on sign-in; stored in localStorage and synced via the server (`character` on create/join/hello, `setCharacter` event). Bots get random characters.
+- Characters: a customizable regular avatar and the special Barbarian. Appearance is stored locally and synced via the server on create/join/reconnect and `setCharacter`. Bots retain twelve varied regular presets.
 - Graphics menu (chat drawer): 3D High / 3D Lite / 2D. Phones default to Lite; no-WebGL devices fall back to 2D automatically. Add `?gfx=2d` to force 2D.
 - Installable PWA: `manifest.webmanifest`, `sw.js` (network-first, offline shell), icons in `public/icons/`.
 
@@ -107,7 +107,7 @@ To share over the internet without hosting: `cloudflared tunnel --url http://loc
 
 ## Barbarian model trial
 - Choose **Barbarian** in the character grid, or open `/?character=barbarian&gfx=high`.
-  The existing character choices remain available. The Barbarian has a fixed costume.
+  Choose **Your character** for customization. The Barbarian has a fixed costume.
 - A local, textured GLB is shared by the home preview and table. The portrait is used
   in the lobby, in 2D mode, and while the model loads. Each character has its own head
   motion; reduced-motion preferences are respected.
@@ -118,3 +118,19 @@ To share over the internet without hosting: `cloudflared tunnel --url http://loc
 - The camera looks from your seat, so your own 3D body is hidden at the table.
   To see this model across the table, join from a second browser profile, select
   Barbarian there, and fill the remaining seats with bots.
+
+## Character studio
+- New players start with a simple regular character. **Make it yours** groups choices
+  into Face, Hair, Outfit, and Extras, with visual previews and a reset button.
+- Choose eight hairstyles, six hair colors, six skin tones, five expressions,
+  four eye colors, and optional facial hair. Four outfit styles share six coordinated
+  three-color palettes. Hats, glasses, earrings, a pendant, and a scarf are optional.
+- Regular faces have smooth surfaces, smaller eyes, and no raised cheeks or blush
+  circles. The special Barbarian assets and renderer are unchanged.
+- Inspect the basic avatar locally at `/?character=basic&gfx=high`; use `gfx=2d`
+  to inspect its SVG fallback. Check a second browser profile to see appearance sync.
+- Offline geometry preview: run `node scripts/preview-avatars.mjs`, then
+  `blender --background --python scripts/render-avatar-preview.py`. The intermediate
+  mesh data goes to the system temp directory; the rendered lineup goes to
+  `art-source/avatars/character-lineup.png`. This is a Blender geometry preview,
+  not a screenshot of the browser's lighting or interface.

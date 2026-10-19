@@ -14,9 +14,10 @@ const NCH = CHARACTERS.length;
 
 let playerId = localStorage.getItem('rook.playerId');
 if (!playerId) { playerId = (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2) + Date.now()); localStorage.setItem('rook.playerId', playerId); }
-let charIdx = Number(localStorage.getItem('rook.char') ?? (NCH - 1));
+let charIdx = Number(localStorage.getItem('rook.char') ?? 0);
 if (!(charIdx >= 0 && charIdx < NCH)) charIdx = Math.floor(Math.random() * NCH);
 if (new URLSearchParams(location.search).get('character') === 'barbarian') charIdx = NCH - 1;
+if (new URLSearchParams(location.search).get('character') === 'basic') charIdx = 0;
 let S = null, picked = new Set(), pickedTrump = null, lastTrickShownNo = 0, lastTrickUntil = 0, shownRecapHand = 0, chatSeen = 0, drawerOpen = false;
 let prevHandIds = null, nestIds = new Set(), bidChoice = null, lastHandNo = 0;
 
@@ -81,16 +82,18 @@ renderGfxSeg();
 
 // ---------- character select ----------
 function renderCharGrid(el, onPick) {
-  el.innerHTML = CHARACTERS.map((c, i) => `<button class="char-opt ${i === charIdx ? 'sel' : ''}" data-ch="${i}" aria-pressed="${i === charIdx}" aria-label="${c.label}" title="${c.label}">${avatarSVG(i, { appearance: i === charIdx ? appearance : {} })}<span>${c.label}</span></button>`).join('');
+  const regular = charOf(charIdx).model ? 0 : charIdx;
+  el.classList.add('character-types');
+  el.innerHTML = [[regular,'Your character','Make it yours'],[12,'Barbarian','Special character']].map(([i,label,hint]) => `<button type="button" class="char-opt ${i === charIdx ? 'sel' : ''}" data-ch="${i}" aria-pressed="${i === charIdx}" aria-label="${label}">${avatarSVG(i, { appearance: i===regular ? appearance : {} })}<span>${label}</span><small>${hint}</small></button>`).join('');
   $$('[data-ch]', el).forEach((b) => (b.onclick = () => onPick(+b.dataset.ch)));
 }
 function pickChar(i) {
   charIdx = ((i % NCH) + NCH) % NCH; localStorage.setItem('rook.char', charIdx);
-  renderCharGrid($('#charGrid'), pickChar); $('#charLabel').textContent = charOf(charIdx).label;
+  renderCharGrid($('#charGrid'), pickChar); $('#charLabel').textContent = charOf(charIdx).model ? 'Barbarian' : 'Your character';
   $('#preview2d').innerHTML = avatarSVG(charIdx, { appearance }); if (preview) preview.set(charIdx, appearance);
   renderAppearance($('#appearanceControls'), () => pickChar(charIdx));
 }
-$('#charPrev').onclick = () => pickChar(charIdx - 1); $('#charNext').onclick = () => pickChar(charIdx + 1);
+$('#charPrev').onclick = $('#charNext').onclick = () => pickChar(charOf(charIdx).model ? 0 : 12);
 pickChar(charIdx);
 function startPreview() {
   if (preview || gfx === '2d') { $('#charPreview').classList.toggle('flat', !preview); return; }
@@ -103,11 +106,29 @@ function renderAppearance(el, changed) {
     el.innerHTML = '<div class="model-look"><strong>Classic Barbarian</strong><span>Golden hair · leather armor · steel sword</span></div>';
     return;
   }
-  const labels = { skin: 'Skin tone', shirt: 'Outfit', hair: 'Hair color', hat: 'Headwear', glasses: 'Eyewear' };
-  const colors = { skin: ['Porcelain', 'Peach', 'Tan', 'Bronze', 'Brown', 'Deep'], shirt: ['Royal', 'Teal', 'Ruby', 'Violet', 'Ivory', 'Honey'], hair: ['Espresso', 'Chestnut', 'Blond', 'Copper', 'Silver', 'Black'] };
-  el.innerHTML = Object.entries(Style.options).map(([key, values]) => `<fieldset class="style-row"><legend>${icon(key === 'shirt' ? 'shirt' : key === 'hat' ? 'hat' : key === 'glasses' ? 'glasses' : 'palette')}${labels[key]}</legend><div class="style-choices">${values.map((value, i) => `<button type="button" class="style-choice ${value.startsWith('#') ? 'swatch' : ''}" data-style="${key}" data-value="${i}" aria-label="${colors[key]?.[i] || value}" title="${colors[key]?.[i] || value}" aria-pressed="${(charOf(charIdx, appearance)[key] || 'none') === value}" ${value.startsWith('#') ? `style="--swatch:${value}"` : ''}>${value.startsWith('#') ? '<span aria-hidden="true">✓</span>' : `${avatarSVG(charIdx, { appearance: { ...appearance, [key]: i } })}<span>${value === 'none' ? 'None' : value}</span>`}</button>`).join('')}</div></fieldset>`).join('') + '<button type="button" class="btn tiny ghost" data-reset>Reset to character preset</button>';
-  $$('[data-style]', el).forEach((button) => button.onclick = () => { appearance[button.dataset.style] = +button.dataset.value; saveAppearance(); renderAppearance(el, changed); changed(); });
-  $('[data-reset]', el).onclick = () => { appearance = {}; saveAppearance(); renderAppearance(el, changed); changed(); };
+  const groups = [
+    { id:'face', label:'Face', art:'people', keys:['skin','expression','eyeColor','facialHair'] },
+    { id:'hair', label:'Hair', art:'palette', keys:['style','hair'] },
+    { id:'outfit', label:'Outfit', art:'shirt', keys:['outfit','shirt'] },
+    { id:'extras', label:'Extras', art:'hat', keys:['hat','glasses','accessory'] },
+  ];
+  const group = groups.find((g)=>g.id===el.dataset.category) || groups[0];
+  const labels = {skin:'Skin tone',expression:'Expression',eyeColor:'Eye color',facialHair:'Facial hair',style:'Hairstyle',hair:'Hair color',outfit:'Outfit style',shirt:'Color theme',hat:'Headwear',glasses:'Glasses',accessory:'Accessories'};
+  const names = {skin:['Porcelain','Peach','Tan','Bronze','Brown','Deep'],hair:['Espresso','Chestnut','Blond','Copper','Silver','Black'],eyeColor:['Brown','Teal','Blue','Hazel'],style:['Crop','Side sweep','Bob','Long','Bun','Curls','Afro','Shaved'],expression:['Soft smile','Big grin','Calm','Joyful','Wink'],outfit:['Everyday','Hoodie','Jacket','Cardigan'],accessory:['None','Studs','Hoops','Pendant','Scarf'],facialHair:['None','Mustache','Beard'],hat:['None','Cap','Beanie','Headband','Bowler','Cowboy'],glasses:['None','Round','Square','Sunglasses']};
+  const look=charOf(charIdx,appearance);
+  el.innerHTML=`<div class="look-tabs" role="group" aria-label="Customize your character">${groups.map(g=>`<button type="button" data-category="${g.id}" aria-pressed="${g.id===group.id}">${icon(g.art)}<span>${g.label}</span></button>`).join('')}</div>` + group.keys.map(key=>`<fieldset class="style-row"><legend>${labels[key]}</legend><div class="style-choices ${key==='shirt'?'palette-choices':''}">${Style.options[key].map((value,i)=>{
+    const palette=key==='shirt'?Style.palettes[i]:null;
+    const name=palette?.name||names[key]?.[i]||value;
+    const swatch=value.startsWith('#')&&!palette;
+    return `<button type="button" class="style-choice ${swatch?'swatch':''} ${palette?'palette-choice':''}" data-style="${key}" data-value="${i}" aria-label="${name}" title="${name}" aria-pressed="${look[key]===value}" ${swatch?`style="--swatch:${value}"`:''}>${palette?`<span class="palette-stripes" aria-hidden="true"><i style="background:${palette.primary}"></i><i style="background:${palette.secondary}"></i><i style="background:${palette.accent}"></i></span><span>${name}</span>`:swatch?'<span aria-hidden="true">&#10003;</span>':`${avatarSVG(charIdx,{appearance:{...appearance,[key]:i}})}<span>${name}</span>`}</button>`;
+  }).join('')}</div></fieldset>`).join('')+'<button type="button" class="btn tiny ghost" data-reset>Reset look</button>';
+  $$('[data-category]',el).forEach(button=>button.onclick=()=>{el.dataset.category=button.dataset.category;renderAppearance(el,changed);$(`[data-category="${el.dataset.category}"]`,el)?.focus();});
+  $$('[data-style]',el).forEach(button=>button.onclick=()=>{
+    const key=button.dataset.style,value=+button.dataset.value;
+    appearance[key]=value;saveAppearance();changed();
+    $(`[data-style="${key}"][data-value="${value}"]`,el)?.focus();
+  });
+  $('[data-reset]',el).onclick=()=>{appearance={};saveAppearance();changed();};
 }
 function saveAppearance() {
   localStorage.setItem('rook.appearance', JSON.stringify(appearance));
@@ -115,7 +136,7 @@ function saveAppearance() {
 }
 renderAppearance($('#appearanceControls'), () => pickChar(charIdx));
 function openCharModal() {
-  openModal(`<h2>${icon('palette')} Dress up!</h2><div class="modal-avatar" id="mAvatar"></div><div class="char-grid modal-grid" id="mGrid"></div><div id="mAppearance"></div><div class="modal-btns"><button class="btn primary" id="mDone">Looking good</button></div>`, 'char');
+  openModal(`<h2>${icon('palette')} Make it yours</h2><div class="modal-avatar" id="mAvatar"></div><div class="char-grid modal-grid" id="mGrid"></div><div id="mAppearance"></div><div class="modal-btns"><button class="btn primary" id="mDone">Looking good</button></div>`, 'char');
   const refresh = () => { renderAppearance($('#mAppearance'), refresh); renderCharGrid($('#mGrid'), pick); $('#mAvatar').innerHTML = avatarSVG(charIdx, { appearance }); pickChar(charIdx); renderAppearance($('#appearanceControls'), () => pickChar(charIdx)); };
   const pick = (i) => { pickChar(i); saveAppearance(); refresh(); };
   refresh(); renderAppearance($('#mAppearance'), refresh); $('#mDone').onclick = closeModal;

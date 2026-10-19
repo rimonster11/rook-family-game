@@ -126,7 +126,7 @@ test('live sockets: appearance sync, teammate approval, spectator rejection and 
   const sockets = [];
   const connect = async () => { const s = io(url, { transports: ['websocket'], forceNew: true }); sockets.push(s); await event(s, 'connect'); return s; };
   t.after(() => sockets.forEach((s) => s.close()));
-  const host = await connect(); let pending = event(host, 'state');
+  let host = await connect(); let pending = event(host, 'state');
   host.emit('createRoom', { playerId: 'host', name: 'Host', character: 3, appearance: { shirt: 2, hat: 1, skin: 100 } });
   let state = await pending; const code = state.room.code;
   assert.deepEqual(state.room.seats[0].appearance, { shirt: 2, hat: 1 });
@@ -140,6 +140,13 @@ test('live sockets: appearance sync, teammate approval, spectator rejection and 
   pending = event(host, 'state', (s) => s.room.teams[0].name === 'Nest Friends'); partner.emit('respondTeamName', { id, accept: true }); await pending;
   pending = event(partner, 'state', (s) => s.room.seats[0].appearance.shirt === 4); host.emit('setCharacter', { character: 5, appearance: { shirt: 4, glasses: 3 } }); state = await pending;
   assert.equal(state.room.seats[0].character, 5);
+  const studio = { style: 7, expression: 4, outfit: 3, accessory: 2, facialHair: 2, eyeColor: 3, shirt: 5, skin: 4, hair: 2 };
+  pending = event(partner, 'state', (s) => s.room.seats[0].appearance.style === 7);
+  host.emit('setCharacter', { character: 0, appearance: studio }); state = await pending;
+  assert.deepEqual(state.room.seats[0].appearance, studio);
+  host.disconnect(); host = await connect(); pending = event(host, 'state');
+  host.emit('hello', { code, playerId: 'host' }); state = await pending;
+  assert.deepEqual(state.room.seats[0].appearance, studio, 'All studio choices survive reconnect');
   pending = event(partner, 'state', (s) => s.room.seats[0].character === 12);
   host.emit('setCharacter', { character: 12, appearance: { shirt: 4 } }); state = await pending;
   assert.equal(state.room.seats[0].character, 12, 'Barbarian selection reaches other players');
