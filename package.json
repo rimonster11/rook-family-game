@@ -1,0 +1,20 @@
+{
+  "name": "rook-online",
+  "version": "1.0.0",
+  "description": "Play Rook online with friends (family rules) - Node/Express/Socket.IO",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test test/",
+    "sim": "node src/sim.js",
+    "e2e": "node scripts/e2e-socket.js"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.19.2",
+    "socket.io": "^4.7.5"
+  },
+  "devDependencies": {
+    "socket.io-client": "^4.8.4"
+  }
+}
