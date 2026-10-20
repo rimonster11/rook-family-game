@@ -2,6 +2,7 @@
 import { cardHTML, backHTML, birdSVG, SUIT, cardPts, CHARACTERS, charOf, avatarSVG } from './art.js';
 import './hand-progress.js';
 import { installSwipes, animateDeal } from './table-experience.js';
+import { installMobileTable } from './mobile-table.js';
 import { icon, wordmark } from './ui-art.js';
 const Style = globalThis.RookStyle;
 let appearance = {};
@@ -314,6 +315,7 @@ function plateHTML(seat, g) {
 function renderGame() {
   if(!S?.game)return;
   const g = S.game; const me = S.you.seat;
+  $('#game').dataset.phase = g.phase;
   clearTimeout(bubbleTimer);
   const fresh=S.room.chat.filter(m=>m.from && Date.now()-m.t<6500);
   if(fresh.length) bubbleTimer=setTimeout(()=>S?.game&&renderGame(),Math.max(50,Math.min(...fresh.map(m=>6500-(Date.now()-m.t)))+20));
@@ -366,14 +368,19 @@ function renderGame() {
 
 function layoutFan(el) {
   const cards = $$('.card', el); const n = cards.length; if (!n) return;
+  const mobile = $('#game').classList.contains('mobile-table');
+  el.classList.toggle('nest-grid', mobile && n > 9);
+  if (mobile && n > 9) return;
   const W = el.clientWidth || 360; const cw = cards[0].offsetWidth || 70;
   const step = Math.min(cw * 0.78, (W - cw - 28) / Math.max(1, n - 1));
-  const spread = Math.min(3.2, 26 / n);
+  const spread = mobile ? .6 : Math.min(3.2, 26 / n);
   cards.forEach((c, i) => {
-    const o = i - (n - 1) / 2; c.style.setProperty('--x', `${o * step}px`); c.style.setProperty('--r', `${o * spread}deg`); c.style.setProperty('--y', `${Math.min(18, o * o * 0.45)}px`); c.style.zIndex = i + 1;
+    const o = i - (n - 1) / 2; c.style.setProperty('--x', `${o * step}px`); c.style.setProperty('--r', `${o * spread}deg`); c.style.setProperty('--y', `${mobile ? 0 : Math.min(18, o * o * 0.45)}px`); c.style.zIndex = i + 1;
   });
 }
 window.addEventListener('resize', () => layoutFan($('#hand')));
+// The table's ResizeObserver handles its canvas; viewport scroll need not reset WebGL.
+installMobileTable(() => layoutFan($('#hand')));
 
 function renderHand(g) {
   const me = S.you.seat; const el = $('#hand');
@@ -427,7 +434,7 @@ function renderAction(g) {
   } else if (g.phase === 'nest' && myTurn) {
     const selPts = g.hand.filter((c) => picked.has(c.id)).reduce((s, c) => s + cardPts(c), 0);
     a.classList.add('panelish');
-    a.innerHTML = `<div class="nestpanel"><div class="np-l"><div class="bp-k">Bury</div><div class="bp-v">${picked.size}<small>/5</small></div><div class="bp-s">${selPts ? `${selPts} pts → last trick` : 'Tap cards to bury'}</div></div>
+    a.innerHTML = `<div class="nestpanel"><div class="np-l"><div class="bp-k">Bury</div><div class="bp-v">${picked.size}<small>/5</small></div><div class="bp-s">${selPts ? `<span>${selPts} pts</span><span class="nest-point-note"> → last trick</span>` : '<span class="nest-empty-hint">Tap cards to bury</span>'}</div></div>
       <div class="np-t"><div class="bp-k">Name trump</div><div class="trumps">${['R', 'B', 'G', 'Y'].map((c) => `<button class="trumpbtn s-${c} ${pickedTrump === c ? 'sel' : ''}" data-trump="${c}" aria-label="${SUIT[c].name}"><span>${SUIT[c].name}</span><em>${g.hand.filter((x) => x.color === c && !picked.has(x.id)).length}</em></button>`).join('')}</div></div>
       <div class="nest-options">${g.settings.allowLowCard?`<label>Card order<select id="playMode"><option value="high" ${pickedMode==='high'?'selected':''}>High wins</option><option value="low" ${pickedMode==='low'?'selected':''}>Low wins - Rook still highest</option></select></label>`:''}<label class="moon-choice"><input type="checkbox" id="moonChoice" ${pickedMoon?'checked':''}> Shoot the moon</label><small>Personally win all 9 tricks: +500. Anyone else wins one: -500.</small></div>
       <button class="btn primary" id="discardBtn" ${picked.size === 5 && pickedTrump ? '' : 'disabled'}>Confirm</button></div>`;

@@ -220,7 +220,7 @@ export function createTable(container, { quality = 'high', onFps } = {}) {
       const on = s.pos === turnPos; s.ring.material.opacity += ((on ? 0.55 + 0.3 * Math.sin(k * 4) : 0) - s.ring.material.opacity) * Math.min(1, dt * 8);
       if (s.ch) { s.ch.position.y = 0.15 + (reducedMotion() ? 0 : Math.sin(k * 1.6 + s.dir.x * 2 + s.dir.z) * 0.015 + (on ? Math.abs(Math.sin(k * 3)) * 0.04 : 0)); animateCharacter(s.ch, k, on, reducedMotion()); }
       const el = plateEls[s.pos];
-      if (el && s.pos !== 'bottom') { v.copy(s.anchor).project(cam); const x = (v.x * 0.5 + 0.5) * W, y = (-v.y * 0.5 + 0.5) * Hh; const ew = el._w || 120, eh = el._h || 48; const cx = Math.min(W - ew / 2 - 6, Math.max(ew / 2 + 6, x)), cy = Math.min(Hh - 60, Math.max(eh + 30, y)); el.style.transform = `translate(${cx.toFixed(1)}px, ${cy.toFixed(1)}px) translate(-50%, -100%)`; }
+      if (el && s.pos !== 'bottom' && !container.closest('.mobile-table')) { v.copy(s.anchor).project(cam); const x = (v.x * 0.5 + 0.5) * W, y = (-v.y * 0.5 + 0.5) * Hh; const ew = el._w || 120, eh = el._h || 48; const cx = Math.min(W - ew / 2 - 6, Math.max(ew / 2 + 6, x)), cy = Math.min(Hh - 60, Math.max(eh + 30, y)); el.style.transform = `translate(${cx.toFixed(1)}px, ${cy.toFixed(1)}px) translate(-50%, -100%)`; }
     }
     renderer.render(scene, cam);
     frames++; if (now - fpsT > 3000) { onFps && onFps(frames * 1000 / (now - fpsT)); frames = 0; fpsT = now; }

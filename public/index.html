@@ -15,6 +15,7 @@
 <link rel="stylesheet" href="game-art.css">
 <link rel="stylesheet" href="table-play.css">
 <link rel="stylesheet" href="clubhouse.css">
+<link rel="stylesheet" href="mobile-table.css">
 <link rel="preload" href="fonts/LilitaOne-Regular.ttf" as="font" type="font/ttf" crossorigin>
 <link rel="preload" href="fonts/Nunito-Variable.ttf" as="font" type="font/ttf" crossorigin>
 <link rel="modulepreload" href="js/art.js">
@@ -93,10 +94,13 @@
       </div>
     </header>
     <div id="handTracker" class="hand-tracker" aria-label="Current hand points"></div>
+    <div class="mobile-table-tools">
     <button id="scoreGrip" class="panel-grip score-grip" aria-label="Open scoreboard; swipe right">Scores &rsaquo;</button>
     <button id="chatGrip" class="panel-grip chat-grip" aria-label="Open chat; swipe left">&lsaquo; Chat</button>
     <details id="recentTrick" class="recent-trick"><summary>Last trick</summary><div id="recentTrickCards"></div></details>
+    </div>
     <div class="game-wrap">
+      <div id="mobileReadout" class="mobile-readout"></div>
       <div class="table-area" id="tableArea">
         <div class="table2d" id="table2d"><div class="felt"><div class="felt-bird"></div></div></div>
         <div class="seat pos-top" id="seat-top"></div>
