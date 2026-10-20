@@ -19,7 +19,7 @@ export function cardHTML(c, cls = '', trump = null, style = '') {
   const p = cardPts(c);
   const tr = trump && c.color === trump ? ' trump' : '';
   return `<div class="card face s-${c.color}${tr} ${cls}" data-id="${c.id}" title="${SUIT[c.color].name} ${c.rank}${p ? ` · ${p} pts` : ''}" style="--sc:${SUIT[c.color].hex};${style}">
-<span class="idx tl">${c.rank}</span><span class="idx br">${c.rank}</span><div class="frame"><span class="num">${c.rank}</span><span class="mini">${birdSVG('currentColor', '#fff', 'transparent')}</span></div>${p ? `<span class="ptb">${p}</span>` : ''}</div>`;
+<span class="idx tl">${c.rank}</span><span class="idx br">${c.rank}</span><div class="frame"><span class="num${c.rank >= 10 ? ' n2' : ''}">${c.rank}</span><span class="mini">${birdSVG('currentColor', '#fff', 'transparent')}</span></div>${p ? `<span class="ptb">${p}</span>` : ''}</div>`;
 }
 export const backHTML = (cls = '') => `<div class="card back ${cls}"><div class="bk-in">${birdSVG('#fff', '#123a9c', 'rgba(18,58,156,.2)')}</div></div>`;
 
@@ -43,17 +43,29 @@ export function drawCardFace(ctx, c) {
     ctx.font = `800 30px ${font}`; ctx.fillText('20', CW / 2, CH - 34);
     return;
   }
-  const s = SUIT[c.color];
+  // Same proportions as the HTML card: corner indices sit clear of the frame; ink is measured so numbers center exactly.
+  const s = SUIT[c.color], u = CW / 100, two = c.rank >= 10, hue = c.color === 'Y' ? '#d4a600' : s.hex;
   rr(ctx, 4, 4, CW - 8, CH - 8, 22); ctx.fillStyle = '#fbfcff'; ctx.fill();
-  ctx.lineWidth = 3; ctx.strokeStyle = '#c9d3e6'; ctx.stroke();
-  ctx.lineWidth = 5; ctx.strokeStyle = s.hex; rr(ctx, 40, 40, CW - 80, CH - 80, 14); ctx.stroke();
-  ctx.fillStyle = s.hex; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.font = `900 ${c.rank >= 10 ? 116 : 140}px ${font}`; ctx.fillText(String(c.rank), CW / 2, CH / 2 + 6);
-  ctx.font = `800 40px ${font}`; ctx.fillText(String(c.rank), 22 + (c.rank >= 10 ? 4 : 0), 26);
-  ctx.save(); ctx.translate(CW - 22 - (c.rank >= 10 ? 4 : 0), CH - 26); ctx.rotate(Math.PI); ctx.fillText(String(c.rank), 0, 0); ctx.restore();
-  drawBird(ctx, CW / 2 - 18, CH - 92, 36, s.hex, '#fff');
+  ctx.lineWidth = 4; ctx.strokeStyle = '#aebbd3'; ctx.stroke();
+  const fx = 14 * u, fy = 24 * u, fw = CW - 2 * fx, fh = CH - 2 * fy;
+  ctx.lineWidth = 2.6 * u; ctx.strokeStyle = hue; rr(ctx, fx, fy, fw, fh, 7 * u); ctx.stroke();
+  ctx.fillStyle = hue; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  // Yellow on white needs a faint dark edge to stay legible under the table lights.
+  const edge = c.color === 'Y' ? 'rgba(110,84,0,.6)' : null;
+  const ink = (text, px, cx, cy, outline = edge) => {
+    ctx.font = `${px}px ${font}`; const m = ctx.measureText(text);
+    const x = cx + (m.actualBoundingBoxLeft - m.actualBoundingBoxRight) / 2, y = cy + (m.actualBoundingBoxAscent - m.actualBoundingBoxDescent) / 2;
+    if (outline) { ctx.lineWidth = px * 0.06; ctx.lineJoin = 'round'; ctx.strokeStyle = outline; ctx.strokeText(text, x, y); }
+    ctx.fillText(text, x, y);
+  };
+  const numPx = (two ? 40 : 46) * u, birdS = 17 * u, cy = CH / 2 - birdS * 0.55;
+  ink(String(c.rank), numPx, CW / 2, cy);
+  drawBird(ctx, CW / 2 - birdS / 2, cy + numPx * 0.36 + 2 * u - birdS * 0.15, birdS, hue, '#fff');
+  const idxPx = 17 * u, ix = 8 * u + idxPx * (two ? 0.48 : 0.28), iy = 5 * u + idxPx * 0.5;
+  ink(String(c.rank), idxPx, ix, iy);
+  ctx.save(); ctx.translate(CW, CH); ctx.rotate(Math.PI); ink(String(c.rank), idxPx, ix, iy); ctx.restore();
   const p = cardPts(c);
-  if (p) { ctx.fillStyle = '#0d2a6e'; ctx.beginPath(); ctx.arc(CW - 30, 30, 20, 0, 7); ctx.fill(); ctx.fillStyle = '#fff'; ctx.font = `800 20px ${font}`; ctx.fillText(String(p), CW - 30, 31); }
+  if (p) { const r = 8.5 * u, bx = CW - 6 * u - r, by = 5 * u + r; ctx.fillStyle = '#0d2a6e'; ctx.beginPath(); ctx.arc(bx, by, r, 0, 7); ctx.fill(); ctx.fillStyle = '#fff'; ink(String(p), 9.5 * u, bx, by, null); }
 }
 export function drawCardBack(ctx) {
   ctx.clearRect(0, 0, CW, CH);
@@ -66,10 +78,15 @@ export function drawCardBack(ctx) {
   drawBird(ctx, CW / 2 - 60, CH / 2 - 62, 120, '#0b2470', '#fff', 'rgba(255,255,255,.2)');
 }
 export function drawFeltEmblem(ctx, S) {
+  // A darker trick zone under the played cards keeps white faces crisp against the felt.
+  const z = ctx.createRadialGradient(S / 2, S / 2, S * 0.05, S / 2, S / 2, S * 0.31);
+  z.addColorStop(0, 'rgba(6,20,64,.62)'); z.addColorStop(0.85, 'rgba(6,20,64,.5)'); z.addColorStop(1, 'rgba(6,20,64,0)');
+  ctx.fillStyle = z; ctx.beginPath(); ctx.arc(S / 2, S / 2, S * 0.31, 0, 7); ctx.fill();
+  ctx.strokeStyle = 'rgba(237,197,129,.55)'; ctx.lineWidth = S * 0.004; ctx.setLineDash([S * 0.012, S * 0.009]);
+  ctx.beginPath(); ctx.arc(S / 2, S / 2, S * 0.285, 0, 7); ctx.stroke(); ctx.setLineDash([]);
   ctx.strokeStyle = 'rgba(255,255,255,.10)'; ctx.lineWidth = S * 0.006;
-  ctx.beginPath(); ctx.arc(S / 2, S / 2, S * 0.26, 0, 7); ctx.stroke();
   ctx.beginPath(); ctx.arc(S / 2, S / 2, S * 0.44, 0, 7); ctx.stroke();
-  drawBird(ctx, S / 2 - S * 0.17, S / 2 - S * 0.18, S * 0.34, 'rgba(255,255,255,.07)', 'rgba(255,255,255,.0)');
+  drawBird(ctx, S / 2 - S * 0.11, S / 2 - S * 0.12, S * 0.22, 'rgba(255,255,255,.05)', 'rgba(255,255,255,0)');
 }
 
 // ---------- characters ----------

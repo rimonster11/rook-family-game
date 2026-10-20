@@ -113,11 +113,6 @@
   .mobile-table .hand-wrap:has(.nest-grid) { height: 152px; flex-basis: 152px; }
   .mobile-table .hand.nest-grid { display: grid; grid-template-columns: repeat(7,minmax(0,1fr)); gap: 4px 3px; padding: 4px 6px; align-content: center; }
   .mobile-table .hand.nest-grid .card { --cw: 100%; --ch: 70px; position: relative; width: 100%; height: 70px; left: auto; bottom: auto; margin: 0; transform: none!important; animation: none; border-radius: 7px; }
-  .mobile-table .hand.nest-grid .card .num { font-size: 28px; }
-  .mobile-table .hand.nest-grid .card .idx { font-size: 12px; }
-  .mobile-table .hand.nest-grid .card .ptb { font-size: 9px; }
-  .mobile-table .hand.nest-grid .card .rk-top { font-size: 11px; }
-  .mobile-table .hand.nest-grid .card .rk-pts { font-size: 11px; }
   .mobile-table .hand.nest-grid .card.picked { box-shadow: inset 0 0 0 3px #f4cb7c, 0 0 0 2px #f4cb7c; }
   .mobile-table .hand.nest-grid .card.picked::before { content: '✓'; position: absolute; z-index: 3; right: 2px; bottom: 3px; background: #ffe4aa; color: #203b50; border-radius: 50%; padding: 0 3px; font-size: 13px; }
   .mobile-table .hand.nest-grid .card.fromnest::after { font-size: 7px; }

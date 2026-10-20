@@ -18,19 +18,37 @@ function mat(hex, o = {}) {
   if (!matCache.has(k)) matCache.set(k, new THREE.MeshStandardMaterial({ color: hex, roughness: o.r ?? 0.65, metalness: o.m ?? 0, ...(o.e ? { emissive: o.e, emissiveIntensity: o.ei ?? 1 } : {}), ...(o.t ? { transparent: true, opacity: o.t } : {}) }));
   return matCache.get(k);
 }
-let backTex = null; const faceTex = new Map(); let maxAniso = 4;
+let backTex = null; const faceTex = new Map(); let maxAniso = 4, texScale = 1.5;
 function canvasTex(draw, w = CW, h = CH) { const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = maxAniso; return t; }
-const getBack = () => backTex || (backTex = canvasTex(drawCardBack));
-function getFace(card) { if (!faceTex.has(card.id)) faceTex.set(card.id, canvasTex((ctx) => drawCardFace(ctx, card))); return faceTex.get(card.id); }
+// Card art is drawn above nominal size so numbers stay sharp at an angle; faces are released when a card leaves the table.
+const cardTex = (draw) => canvasTex((ctx) => { ctx.scale(texScale, texScale); draw(ctx); }, Math.round(CW * texScale), Math.round(CH * texScale));
+const getBack = () => backTex || (backTex = cardTex(drawCardBack));
+function getFace(card) { if (!faceTex.has(card.id)) faceTex.set(card.id, cardTex((ctx) => drawCardFace(ctx, card))); return faceTex.get(card.id); }
+function dropFace(id) { faceTex.get(id)?.dispose(); faceTex.delete(id); }
+let glowTex = null;
+const getGlow = () => glowTex || (glowTex = canvasTex((ctx, w) => {
+  const h = Math.round(w * CH / CW), mx = w * 0.12, my = h * 0.12, r = w * 0.09;
+  ctx.fillStyle = '#fff'; ctx.shadowColor = '#fff'; ctx.shadowBlur = w * 0.08;
+  ctx.beginPath(); ctx.moveTo(mx + r, my); ctx.arcTo(w - mx, my, w - mx, h - my, r); ctx.arcTo(w - mx, h - my, mx, h - my, r); ctx.arcTo(mx, h - my, mx, my, r); ctx.arcTo(mx, my, w - mx, my, r); ctx.fill();
+}, 128, Math.round(128 * CH / CW)));
 
 const CARD_W = 0.92, CARD_H = CARD_W * CH / CW;
 const cardGeo = new THREE.PlaneGeometry(CARD_W, CARD_H);
-function makeCard(card) {
+// A little self-light keeps white faces bright under the tone-mapped spotlight.
+const cardMat = (map) => new THREE.MeshStandardMaterial({ map, roughness: 0.62, emissive: '#ffffff', emissiveMap: map, emissiveIntensity: 0.22, transparent: true, alphaTest: 0.5 });
+function makeCard(card, trick = false) {
   const g = new THREE.Group();
-  const f = new THREE.Mesh(cardGeo, new THREE.MeshStandardMaterial({ map: card ? getFace(card) : getBack(), roughness: 0.45, transparent: true, alphaTest: 0.5 }));
-  const b = new THREE.Mesh(cardGeo, new THREE.MeshStandardMaterial({ map: getBack(), roughness: 0.45, transparent: true, alphaTest: 0.5 }));
+  const f = new THREE.Mesh(cardGeo, cardMat(card ? getFace(card) : getBack()));
+  const b = new THREE.Mesh(cardGeo, cardMat(getBack()));
   b.rotation.y = Math.PI; f.castShadow = true; b.castShadow = true;
-  g.add(f, b); return g;
+  g.add(f, b);
+  if (trick) {
+    // Played cards get a soft contact shadow, plus a gold glow that lights up under the trick winner.
+    const glow = (color, opacity, scale, x, y, z) => { const m = new THREE.Mesh(cardGeo, new THREE.MeshBasicMaterial({ map: getGlow(), color, transparent: true, opacity, depthWrite: false })); m.scale.set(scale, scale, 1); m.position.set(x, y, z); g.add(m); return m; };
+    glow('#000000', 0.6, 1.3, 0.03, -0.06, -0.012);
+    g.userData.halo = glow('#ffd36e', 1, 1.44, 0, 0, -0.006); g.userData.halo.visible = false;
+  }
+  return g;
 }
 
 // Character geometry is shared by the preview and table.
@@ -67,7 +85,7 @@ export function createTable(container, { quality = 'high', onFps } = {}) {
   const canvas = document.createElement('canvas'); canvas.className = 'gl'; container.prepend(canvas);
   const hi = quality === 'high';
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: hi, powerPreference: hi ? 'high-performance' : 'low-power' });
-  maxAniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  maxAniso = Math.min(8, renderer.capabilities.getMaxAnisotropy()); texScale = hi ? 2 : 1.5;
   renderer.setPixelRatio(Math.min(hi ? 2 : 1.25, window.devicePixelRatio || 1));
   renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
   renderer.shadowMap.enabled = hi; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -93,23 +111,43 @@ export function createTable(container, { quality = 'high', onFps } = {}) {
     }
   }, 512, 512);
   const wood = new THREE.MeshStandardMaterial({ map: woodGrain, roughness: 0.38, metalness: 0.05 });
-  const feltTex = canvasTex((ctx, S) => { const g = ctx.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2); g.addColorStop(0, '#1d4fc4'); g.addColorStop(0.7, '#123a9c'); g.addColorStop(1, '#0b2a78'); ctx.fillStyle = g; ctx.fillRect(0, 0, S, S); const n = ctx.getImageData(0, 0, S, S); for (let i = 0; i < n.data.length; i += 4) { const v = (Math.random() - 0.5) * 10; n.data[i] += v; n.data[i + 1] += v; n.data[i + 2] += v; } ctx.putImageData(n, 0, 0); drawFeltEmblem(ctx, S); }, 1024, 1024);
-  const felt = new THREE.Mesh(new THREE.CircleGeometry(R, 72), new THREE.MeshStandardMaterial({ map: feltTex, roughness: 0.95 })); felt.rotation.x = -Math.PI / 2; felt.receiveShadow = true; scene.add(felt);
-  const rim = new THREE.Mesh(new THREE.TorusGeometry(R + 0.12, 0.2, 20, 96), wood); rim.rotation.x = Math.PI / 2; rim.position.y = 0.02; rim.castShadow = hi; rim.receiveShadow = hi; scene.add(rim);
-  const inlay = new THREE.Mesh(new THREE.TorusGeometry(R - 0.12, 0.018, 6, 96), new THREE.MeshStandardMaterial({ color: '#edc581', roughness: 0.3, metalness: 0.6 })); inlay.rotation.x = Math.PI / 2; inlay.position.y = 0.006; scene.add(inlay);
-  const apron = new THREE.Mesh(new THREE.CylinderGeometry(R + 0.2, R - 0.1, 0.45, 72, 1, true), wood); apron.position.y = -0.24; scene.add(apron);
-  const ped = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.8, 2.2, 32), wood); ped.position.y = -1.5; scene.add(ped);
-  const foot = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.6, 0.18, 40), wood); foot.position.y = -2.52; foot.receiveShadow = hi; scene.add(foot);
+  const leather = new THREE.MeshStandardMaterial({ color: '#7a4322', roughness: 0.42, metalness: 0.05 });
+  const brass = new THREE.MeshStandardMaterial({ color: '#e7c27e', roughness: 0.3, metalness: 0.65 });
+  const feltTex = canvasTex((ctx, S) => { const g = ctx.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2); g.addColorStop(0, '#2457d0'); g.addColorStop(0.62, '#173fa6'); g.addColorStop(1, '#0d2d7e'); ctx.fillStyle = g; ctx.fillRect(0, 0, S, S); const n = ctx.getImageData(0, 0, S, S); for (let i = 0; i < n.data.length; i += 4) { const v = (Math.random() - 0.5) * 9; n.data[i] += v; n.data[i + 1] += v; n.data[i + 2] += v; } ctx.putImageData(n, 0, 0); drawFeltEmblem(ctx, S); }, 1024, 1024);
+  const felt = new THREE.Mesh(new THREE.CircleGeometry(R, 96), new THREE.MeshStandardMaterial({ map: feltTex, roughness: 0.95 })); felt.rotation.x = -Math.PI / 2; felt.receiveShadow = true; scene.add(felt);
+  // Padded leather rail with brass stitching over a turned wooden skirt.
+  const ring = (radius, tube, m, y, segs = 128, flat = 1) => { const o = new THREE.Mesh(new THREE.TorusGeometry(radius, tube, 20, segs), m); o.rotation.x = Math.PI / 2; o.position.y = y; o.scale.z = flat; scene.add(o); return o; };
+  const rail = ring(R + 0.2, 0.25, leather, 0.07, 160, 0.72); rail.castShadow = hi; rail.receiveShadow = hi;
+  ring(R + 0.2, 0.007, brass, 0.25, 200);
+  ring(R - 0.09, 0.02, brass, 0.008);
+  ring(R + 0.42, 0.06, wood, -0.05);
+  const skirt = new THREE.Mesh(new THREE.CylinderGeometry(R + 0.44, R + 0.3, 0.36, 96, 1, true), wood); skirt.position.y = -0.24; scene.add(skirt);
+  ring(R + 0.31, 0.05, wood, -0.42);
+  const ped = new THREE.Mesh(new THREE.LatheGeometry([[0, -0.4], [0.68, -0.42], [0.5, -0.62], [0.36, -1.0], [0.42, -1.5], [0.33, -1.95], [0.6, -2.3], [1.0, -2.45], [0, -2.45]].map(([x, y]) => new THREE.Vector2(x, y)), 40), wood); scene.add(ped);
+  for (let i = 0; i < 4; i++) { const a = Math.PI / 4 + i * Math.PI / 2; const foot = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.16, 1.5), wood); foot.position.set(Math.sin(a) * 0.95, -2.52, Math.cos(a) * 0.95); foot.rotation.y = a; foot.receiveShadow = hi; scene.add(foot); }
+
+  function buildChair(woodM, shadows) {
+    // Local +z faces the table; the seated character's torso rests on the cushion.
+    const c = new THREE.Group(); const add = (geo, m, x, y, z) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.castShadow = shadows; c.add(o); return o; };
+    const fabric = new THREE.MeshStandardMaterial({ color: '#1b3f86', roughness: 0.82, side: THREE.DoubleSide });
+    const trim = new THREE.MeshStandardMaterial({ color: '#4cc2ff', roughness: 0.4, emissive: '#4cc2ff', emissiveIntensity: 0.3 });
+    add(new THREE.CylinderGeometry(0.64, 0.6, 0.1, 36), woodM, 0, -0.47, -0.14);
+    add(new THREE.CylinderGeometry(0.57, 0.61, 0.14, 36), fabric, 0, -0.35, -0.14);
+    add(new THREE.TorusGeometry(0.6, 0.026, 6, 40), trim, 0, -0.35, -0.14).rotation.x = Math.PI / 2;
+    for (const [x, z] of [[-0.44, 0.26], [0.44, 0.26], [-0.44, -0.54], [0.44, -0.54]]) add(new THREE.CylinderGeometry(0.045, 0.034, 2.1, 10), woodM, x, -1.55, z).rotation.set(z > 0 ? -0.03 : 0.03, 0, x > 0 ? 0.03 : -0.03);
+    // Curved upholstered back between two posts, capped with a wooden rail and team piping.
+    const BR = 1.4, span = 0.9, cz = 0.66;
+    add(new THREE.CylinderGeometry(BR, BR, 0.92, 24, 1, true, Math.PI - span / 2, span), fabric, 0, 0.42, cz);
+    const arc = (r, tube, m, y) => add(new THREE.TorusGeometry(r, tube, 8, 28, span), m, 0, y, cz).rotation.set(-Math.PI / 2, 0, Math.PI / 2 - span / 2);
+    arc(BR, 0.065, woodM, 0.92); arc(BR - 0.03, 0.024, trim, 0.83); arc(BR - 0.03, 0.024, trim, 0.0);
+    for (const sx of [-1, 1]) { const x = sx * BR * Math.sin(span / 2), z = cz - BR * Math.cos(span / 2); add(new THREE.CylinderGeometry(0.055, 0.06, 1.5, 12), woodM, x, 0.2, z); add(new THREE.SphereGeometry(0.085, 14, 10), woodM, x, 1.0, z); }
+    c.userData.trim = { material: trim }; return c;
+  }
 
   // seats
   const seats = POS.map((pos) => {
     const dir = posVec[pos]; const grp = new THREE.Group(); grp.position.copy(dir).multiplyScalar(SEAT_R); grp.lookAt(0, 0, 0); scene.add(grp);
-    const chair = new THREE.Group();
-    const backM = new THREE.MeshStandardMaterial({ color: '#0a1f5c', roughness: 0.8 });
-    backM.side = THREE.DoubleSide;
-    const back = new THREE.Mesh(new THREE.CylinderGeometry(0.72, 0.62, 1.5, 28, 1, true, Math.PI / 2 + 0.25, Math.PI - 0.5), backM); back.position.set(0, 0.25, -0.05); back.castShadow = hi;
-    const trim = new THREE.Mesh(new THREE.TorusGeometry(0.72, 0.05, 8, 28, Math.PI - 0.5), new THREE.MeshStandardMaterial({ color: '#4cc2ff', roughness: 0.4, emissive: '#4cc2ff', emissiveIntensity: 0.25 })); trim.rotation.set(-Math.PI / 2, 0, 0.25); trim.position.set(0, 1.0, -0.05);
-    chair.add(back, trim); grp.add(chair);
+    const chair = buildChair(wood, hi); const trim = chair.userData.trim; grp.add(chair);
     const ring = new THREE.Mesh(new THREE.RingGeometry(0.55, 0.68, 48), new THREE.MeshBasicMaterial({ color: '#9fdcff', transparent: true, opacity: 0, depthWrite: false }));
     ring.rotation.x = -Math.PI / 2; ring.position.copy(dir).multiplyScalar(2.45); ring.position.y = 0.012; scene.add(ring);
     return { pos, dir, grp, chair, trim, ring, ch: null, charIdx: -1, fan: new THREE.Group(), fanCount: -1, anchor: new THREE.Vector3().copy(dir).multiplyScalar(SEAT_R).setY(2.25) };
@@ -131,7 +169,9 @@ export function createTable(container, { quality = 'high', onFps } = {}) {
     const hf = 2 * Math.atan(needHalfW / dist); let vf = 2 * Math.atan(Math.tan(hf / 2) / cam.aspect) * 180 / Math.PI;
     cam.fov = Math.min(portrait ? 80 : 60, Math.max(38, vf)); cam.updateProjectionMatrix();
     for (const st of seats) if (st.dir.x) { const r = portrait ? 3.35 : SEAT_R; st.grp.position.set(st.dir.x * r, 0, 0); st.grp.lookAt(0, 0, 0); st.anchor.set(st.dir.x * r, 2.25, 0); }
+    refitTrick();
   }
+  let refitTrick = () => {};
   const ro = new ResizeObserver(resize); ro.observe(container); resize();
 
   // ---- state ----
@@ -146,17 +186,23 @@ export function createTable(container, { quality = 'high', onFps } = {}) {
   }
   const flatQ = (yaw) => new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, yaw, 'YXZ'));
   const flatQFace = (yaw) => { const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, yaw, 0)); return q.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0))); };
+  // Played cards land large, nearly square to the viewer, and spaced so corner numbers are never covered.
+  // The portrait camera sits farther back, so phones get bigger cards than the desktop view.
   function slotFor(seat, order, trickNo) {
-    const d = posVec[POS[rel(seat)]]; const jitter = ((trickNo * 7 + seat * 13) % 10 - 5) * 0.03;
-    return { p: new THREE.Vector3(d.x * 0.82, 0.02 + order * 0.006, d.z * 0.72), q: flatQFace(jitter + (d.x ? 0.1 * d.x : 0)) };
+    const d = posVec[POS[rel(seat)]]; const jitter = ((trickNo * 7 + seat * 13) % 10 - 5) * 0.01; const k = cam.aspect < 1 ? 1.32 : 1.08;
+    return { p: new THREE.Vector3(d.x * 0.86 * k, 0.03 + order * 0.008, d.z * 0.7 * k), q: flatQFace(jitter + d.x * 0.05), s: k };
   }
+  const discard = (id, e) => { scene.remove(e.obj); e.obj.traverse((o) => o.material && o.material.dispose()); dropFace(id); cards.delete(id); };
+  // Phase panels can reshape the table after a card is thrown; landed cards follow the current camera.
+  const settle = (e) => { const sl = slotFor(e.seat, e.order, e.trickNo); e.obj.position.copy(sl.p); e.obj.quaternion.copy(sl.q); e.obj.scale.setScalar(sl.s); };
+  refitTrick = () => { for (const e of cards.values()) if (e.state === 'landed') settle(e); };
   function addCard(play, order, trickNo) {
-    const obj = makeCard(play.card); const r = rel(play.seat); const d = posVec[POS[r]];
+    const obj = makeCard(play.card, true); const r = rel(play.seat); const d = posVec[POS[r]];
     if (r === 0) { obj.position.set(0, 2.2, 5.2); obj.quaternion.setFromEuler(new THREE.Euler(-0.9, 0, 0)); }
     else { obj.position.copy(d).multiplyScalar(SEAT_R - 0.8).setY(1.0); obj.quaternion.copy(flatQFace(Math.atan2(d.x, d.z))).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI, 0, 0))); }
     scene.add(obj); const slot = slotFor(play.seat, order, trickNo);
-    const entry = { obj, seat: play.seat, trickNo, state: 'flying', landAt: performance.now() + 450 };
-    tween(obj, slot, 450, { arc: 0.8, done: () => { entry.state = 'landed'; } });
+    const entry = { obj, seat: play.seat, order, trickNo, state: 'flying', landAt: performance.now() + 450 };
+    tween(obj, slot, 450, { arc: 0.8, done: () => { entry.state = 'landed'; settle(entry); } });
     cards.set(play.card.id, entry);
   }
   function collect(trickNo, winner) {
@@ -165,7 +211,7 @@ export function createTable(container, { quality = 'high', onFps } = {}) {
     list.forEach(([id, e], i) => {
       e.state = 'collecting';
       const to = { p: new THREE.Vector3(d.x * 2.6, 0.03 + i * 0.01, d.z * 2.4), q: flatQFace(Math.atan2(d.x, d.z) + Math.PI), s: 0.55 };
-      tween(e.obj, to, 520, { delay: i * 40, arc: 0.3, ease: easeIO, done: () => { scene.remove(e.obj); e.obj.traverse((o) => o.material && o.material.dispose()); cards.delete(id); } });
+      tween(e.obj, to, 520, { delay: i * 40, arc: 0.3, ease: easeIO, done: () => discard(id, e) });
     });
   }
   let collectTimer = null, pendingCollect = null;
@@ -194,9 +240,11 @@ export function createTable(container, { quality = 'high', onFps } = {}) {
     const nk = g && g.phase === 'bidding' ? g.nestCount + '|' + (g.nestFaceUp?.id || '') : '';
     if (nk !== nestKey) { nestKey = nk; nestGrp.clear(); if (nk) { for (let i = 0; i < g.nestCount; i++) { const faceUp = g.nestFaceUp && i === g.nestCount - 1; const c = makeCard(faceUp ? g.nestFaceUp : null); c.quaternion.copy(faceUp ? flatQFace(0.05) : flatQFace(0.03 * i).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI, 0, 0)))); c.position.set(faceUp ? 0.95 : 0, 0.02 + i * 0.012, 0); nestGrp.add(c); } } }
     // trick cards
-    plays = plays || []; const tn = won ? won.no : g ? g.trickNo : 0; const ids = new Set(plays.map((p) => p.card.id));
-    for (const [id, e] of cards) if (!ids.has(id) && e.state !== 'collecting') { if (pendingCollect && pendingCollect.no === e.trickNo) { clearTimeout(collectTimer); const pc = pendingCollect; pendingCollect = null; collect(pc.no, pc.winner); } else { scene.remove(e.obj); cards.delete(id); } }
+    // A trick in progress is numbered one past the completed count, matching lastTrick.no once it is won.
+    plays = plays || []; const tn = won ? won.no : g ? g.trickNo + 1 : 0; const ids = new Set(plays.map((p) => p.card.id));
+    for (const [id, e] of cards) if (!ids.has(id) && e.state !== 'collecting') { if (pendingCollect && pendingCollect.no === e.trickNo) { clearTimeout(collectTimer); const pc = pendingCollect; pendingCollect = null; collect(pc.no, pc.winner); } else discard(id, e); }
     plays.forEach((p, i) => { if (!cards.has(p.card.id)) addCard(p, i, tn); });
+    for (const e of cards.values()) e.obj.userData.halo.visible = !!won && e.trickNo === won.no && e.seat === won.winner;
     if (won && (!pendingCollect || pendingCollect.no !== won.no) && [...cards.values()].some((e) => e.trickNo === won.no && e.state !== 'collecting')) {
       const land = Math.max(...[...cards.values()].map((e) => e.landAt)); pendingCollect = { no: won.no, winner: won.winner };
       clearTimeout(collectTimer); collectTimer = setTimeout(() => { if (pendingCollect && pendingCollect.no === won.no) { const pc = pendingCollect; pendingCollect = null; collect(pc.no, pc.winner); } }, Math.max(0, land - performance.now()) + 850);

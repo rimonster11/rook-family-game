@@ -11,8 +11,8 @@
 .recent-trick{position:absolute;z-index:11;right:10px;top:150px;width:min(330px,calc(100vw - 20px));background:#102d50ee;border:1px solid #92b5cf;border-radius:14px;box-shadow:0 5px 20px #0003}
 .recent-trick:not([open]){width:auto}.recent-trick summary{padding:10px 14px;font:17px var(--display);color:#ffe2a0;cursor:pointer;min-height:44px}
 .recent-trick p{font-size:12px;margin:0 12px 10px}.recent-cards{display:flex;justify-content:space-around;padding:0 10px 12px;gap:5px}
-.recent-cards>div{flex:1;min-width:0;text-align:center}.recent-cards .card{margin:0 auto}.recent-cards span{display:block;font-size:11px;overflow-wrap:anywhere;margin-top:5px}
-.trick-winner .card{outline:3px solid #ffe2a0}.trick-winner span{color:#ffe2a0}
+.recent-cards>div{flex:1;min-width:0;text-align:center}.recent-cards .card{margin:0 auto;--cw:54px;--ch:76px}.recent-cards>div>span{display:block;font-size:11px;overflow-wrap:anywhere;margin-top:5px}
+.trick-winner .card{outline:3px solid #ffe2a0}.trick-winner>span{color:#ffe2a0}
 .player-bubble{position:absolute;bottom:calc(100% + 9px);left:50%;transform:translateX(-50%);width:max-content;max-width:195px;background:#fff7df;color:#23364d;padding:10px 12px;border-radius:15px 15px 15px 3px;font:14px var(--font);font-weight:750;line-height:1.3;overflow-wrap:anywhere;box-shadow:0 4px 10px #0004;z-index:8;pointer-events:none;animation:bubble-life 6.5s both;animation-delay:var(--age,0ms)}
 .player-bubble::after{content:'';position:absolute;bottom:-7px;left:45%;border-left:8px solid transparent;border-top:8px solid #fff7df}
 .plate{position:relative}.pos-left .player-bubble{left:0;transform:none}.pos-right .player-bubble{left:auto;right:0;transform:none}
