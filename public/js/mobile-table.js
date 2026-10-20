@@ -3,11 +3,6 @@ export const mobileTableQuery = '(max-width: 640px), (max-height: 500px) and (po
 export function installMobileTable(onResize) {
   const media = matchMedia(mobileTableQuery);
   const root = document.documentElement;
-  const readout = document.getElementById('mobileReadout');
-  const notices = ['banner', 'trumpBadge', 'status'].map(id => {
-    const node = document.getElementById(id), marker = document.createComment(id+' desktop position');
-    node.before(marker); return {node, marker};
-  });
   let frame = 0;
   function update() {
     frame = 0;
@@ -17,11 +12,8 @@ export function installMobileTable(onResize) {
       root.style.setProperty('--table-viewport-height', `${viewport?.height || innerHeight}px`);
       root.style.setProperty('--table-viewport-top', `${viewport?.offsetTop || 0}px`);
     }
+    // Notices stay inside the table area; phone CSS docks them as pills along its bottom edge.
     document.getElementById('game').classList.toggle('mobile-table', media.matches);
-    for (const {node,marker} of notices) {
-      if (media.matches && node.parentNode !== readout) readout.append(node);
-      else if (!media.matches && node.parentNode === readout) marker.after(node);
-    }
     onResize();
   }
   const schedule = () => { if (!frame) frame = requestAnimationFrame(update); };

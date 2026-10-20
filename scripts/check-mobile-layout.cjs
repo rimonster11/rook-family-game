@@ -60,7 +60,7 @@ for(const [engine,type] of Object.entries({chromium,webkit})){
         for(let i=0;i<labels.length;i++)for(let j=i+1;j<labels.length;j++)if(intersects(labels[i],labels[j]))fails.push('player labels overlap');
         for(const label of labels){if(intersects(label,tools))fails.push('tools cover player');if(intersects(label,rect('#mobileReadout')))fails.push('notice covers player');}
         for(const c of document.querySelectorAll('#hand .card')){const r=c.getBoundingClientRect();if(r.x<-.5||r.right>innerWidth+.5||r.bottom>innerHeight-bottom+.5)fails.push('card outside safe viewport');}
-        for(const s of ['#scoreGrip','#chatGrip','#recentTrick summary',...(phase==='bidding'?['#bidDn','#bidUp','#bidBtn','#passBtn']:phase==='burying'?['#discardBtn','.trumpbtn']:[])])if(rect(s).h<43)fails.push('small tap target '+s);
+        for(const s of ['#scoreboard','#chatGrip','#recentTrick summary',...(phase==='bidding'?['#bidDn','#bidUp','#bidBtn','#passBtn']:phase==='burying'?['#discardBtn','.trumpbtn']:[])])if(rect(s).h<43)fails.push('small tap target '+s);
         if(phase==='recap'){const r=rect('#modalCard');if(r.y<top-1||r.bottom>innerHeight-bottom+1)fails.push('recap outside safe viewport');}
         return {fails:[...new Set(fails)],header,table,action,hand,mode:document.querySelector('#tableArea').className,cardCount:document.querySelectorAll('#hand .card').length};
       },{phase,...size});
@@ -70,7 +70,7 @@ for(const [engine,type] of Object.entries({chromium,webkit})){
       if(phase==='bidding'){
         await page.click('#bidUp');await page.click('#bidBtn');
         if(!await page.evaluate(()=>window.__layoutEvents.some(e=>e[0]==='bid')))throw Error('Bid interaction failed');
-        await page.click('#scoreGrip');await page.click('#closeSc');
+        await page.click('#scoreboard');await page.click('#closeSc');
         await page.click('#chatGrip');
         if(!await page.locator('#drawer').evaluate(e=>e.classList.contains('open')))throw Error('Chat did not open');
         await page.locator('#drawer .drawer-head button').click();

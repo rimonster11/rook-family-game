@@ -163,13 +163,40 @@ export function createTable(container, { quality = 'high', onFps } = {}) {
   function resize() {
     W = container.clientWidth || 1; Hh = container.clientHeight || 1; renderer.setSize(W, Hh, false); cam.aspect = W / Hh;
     const portrait = cam.aspect < 1;
-    cam.position.set(0, portrait ? 7.6 : 5.6, portrait ? 7.2 : 6.6);
-    const target = new THREE.Vector3(0, portrait ? 0.2 : 0.9, portrait ? 0.1 : -0.6); cam.lookAt(target);
-    const dist = cam.position.distanceTo(target); const needHalfW = portrait ? 4.5 : 6.2;
-    const hf = 2 * Math.atan(needHalfW / dist); let vf = 2 * Math.atan(Math.tan(hf / 2) / cam.aspect) * 180 / Math.PI;
-    cam.fov = Math.min(portrait ? 80 : 60, Math.max(38, vf)); cam.updateProjectionMatrix();
     for (const st of seats) if (st.dir.x) { const r = portrait ? 3.35 : SEAT_R; st.grp.position.set(st.dir.x * r, 0, 0); st.grp.lookAt(0, 0, 0); st.anchor.set(st.dir.x * r, 2.25, 0); }
+    if (portrait) fitPortrait();
+    else {
+      cam.position.set(0, 5.6, 6.6);
+      const target = new THREE.Vector3(0, 0.9, -0.6); cam.lookAt(target);
+      const dist = cam.position.distanceTo(target);
+      const hf = 2 * Math.atan(6.2 / dist); const vf = 2 * Math.atan(Math.tan(hf / 2) / cam.aspect) * 180 / Math.PI;
+      cam.fov = Math.min(60, Math.max(38, vf)); cam.updateProjectionMatrix();
+    }
     refitTrick();
+  }
+  // Phones: frame the rail, players and their name tags edge to edge, leaving a band at the top for
+  // the tags and at the bottom for the turn pill. Shorter areas get a lower camera so the table stays large.
+  const FIT_PTS = [];
+  for (let i = 0; i < 24; i++) { const a = i / 24 * Math.PI * 2; FIT_PTS.push(new THREE.Vector3(Math.cos(a) * (R + 0.46), 0.25, Math.sin(a) * (R + 0.46))); }
+  FIT_PTS.push(new THREE.Vector3(0, 2.25, -SEAT_R), new THREE.Vector3(0, 1.05, -SEAT_R - 0.75));
+  for (const sx of [-1, 1]) FIT_PTS.push(new THREE.Vector3(sx * 3.35, 2.25, 0), new THREE.Vector3(sx * 3.7, 1.7, 0), new THREE.Vector3(sx * 3.7, -0.3, 0.4));
+  const fitV = new THREE.Vector3(), fitTarget = new THREE.Vector3(0, 0.4, -0.3), fitDir = new THREE.Vector3();
+  function fitPortrait() {
+    const el = THREE.MathUtils.degToRad(THREE.MathUtils.clamp(36 + (Hh / W - 0.7) * 45, 36, 56));
+    fitDir.set(0, Math.sin(el), Math.cos(el)); cam.fov = 34; cam.updateProjectionMatrix();
+    const mt = 2 * 40 / Hh, mb = 2 * 46 / Hh, mx = 2 * 2 / W;
+    const measure = (d) => {
+      cam.position.copy(fitTarget).addScaledVector(fitDir, d); cam.lookAt(fitTarget); cam.updateMatrixWorld(true);
+      let x = 0, y0 = Infinity, y1 = -Infinity;
+      for (const p of FIT_PTS) { fitV.copy(p).project(cam); x = Math.max(x, Math.abs(fitV.x)); y0 = Math.min(y0, fitV.y); y1 = Math.max(y1, fitV.y); }
+      return { x, y0, y1 };
+    };
+    let lo = 4, hi = 80;
+    for (let i = 0; i < 26; i++) { const d = (lo + hi) / 2, m = measure(d); if (m.x <= 1 - mx && m.y1 - m.y0 <= 2 - mt - mb) hi = d; else lo = d; }
+    const m = measure(hi);
+    // Off-axis shift centres the content in the band between the top and bottom HUD margins.
+    cam.projectionMatrix.elements[9] -= (mb - mt) / 2 - (m.y1 + m.y0) / 2;
+    cam.projectionMatrixInverse.copy(cam.projectionMatrix).invert();
   }
   let refitTrick = () => {};
   const ro = new ResizeObserver(resize); ro.observe(container); resize();
@@ -252,7 +279,7 @@ export function createTable(container, { quality = 'high', onFps } = {}) {
   }
 
   // ---- loop ----
-  const v = new THREE.Vector3(); let raf = 0, alive = true, last = performance.now(), frames = 0, fpsT = performance.now(), lowSkip = !hi;
+  const v = new THREE.Vector3(), tags = {}; let raf = 0, alive = true, last = performance.now(), frames = 0, fpsT = performance.now(), lowSkip = !hi;
   function frame(now) {
     if (!alive) return; raf = requestAnimationFrame(frame);
     if (document.hidden || !container.offsetParent) return;
@@ -265,11 +292,20 @@ export function createTable(container, { quality = 'high', onFps } = {}) {
       if (t >= 1) { anims.delete(a); a.done && a.done(); }
     }
     for (const s of seats) {
-      const on = s.pos === turnPos; s.ring.material.opacity += ((on ? 0.55 + 0.3 * Math.sin(k * 4) : 0) - s.ring.material.opacity) * Math.min(1, dt * 8);
+      const on = s.pos === turnPos && s.pos !== 'bottom'; s.ring.material.opacity += ((on ? 0.55 + 0.3 * Math.sin(k * 4) : 0) - s.ring.material.opacity) * Math.min(1, dt * 8);
       if (s.ch) { s.ch.position.y = 0.15 + (reducedMotion() ? 0 : Math.sin(k * 1.6 + s.dir.x * 2 + s.dir.z) * 0.015 + (on ? Math.abs(Math.sin(k * 3)) * 0.04 : 0)); animateCharacter(s.ch, k, on, reducedMotion()); }
       const el = plateEls[s.pos];
-      if (el && s.pos !== 'bottom' && !container.closest('.mobile-table')) { v.copy(s.anchor).project(cam); const x = (v.x * 0.5 + 0.5) * W, y = (-v.y * 0.5 + 0.5) * Hh; const ew = el._w || 120, eh = el._h || 48; const cx = Math.min(W - ew / 2 - 6, Math.max(ew / 2 + 6, x)), cy = Math.min(Hh - 60, Math.max(eh + 30, y)); el.style.transform = `translate(${cx.toFixed(1)}px, ${cy.toFixed(1)}px) translate(-50%, -100%)`; }
+      // Name tags ride just above each player's head; phone tags are compact, so they need less headroom.
+      if (el && s.pos !== 'bottom') { const phone = !!container.closest('.mobile-table'); v.copy(s.anchor).project(cam); const x = (v.x * 0.5 + 0.5) * W, y = (-v.y * 0.5 + 0.5) * Hh; const ew = el._w || 120, eh = el._h || 48; tags[s.pos] = { el, ew, eh, cx: Math.min(W - ew / 2 - 6, Math.max(ew / 2 + 6, x)), cy: Math.min(Hh - 60, Math.max(eh + (phone ? 6 : 30), y)) }; }
+      else tags[s.pos] = null;
     }
+    // On short or narrow tables a side tag can meet the top tag; drop it just below instead of overlapping.
+    const top = tags.top;
+    for (const pos of ['left', 'right']) {
+      const t = tags[pos];
+      if (top && t && Math.abs(t.cx - top.cx) < (t.ew + top.ew) / 2 + 4 && t.cy > top.cy - top.eh - 4 && t.cy - t.eh < top.cy + 4) t.cy = Math.min(Hh - 60, top.cy + t.eh + 6);
+    }
+    for (const t of Object.values(tags)) if (t) t.el.style.transform = `translate(${t.cx.toFixed(1)}px, ${t.cy.toFixed(1)}px) translate(-50%, -100%)`;
     renderer.render(scene, cam);
     frames++; if (now - fpsT > 3000) { onFps && onFps(frames * 1000 / (now - fpsT)); frames = 0; fpsT = now; }
   }

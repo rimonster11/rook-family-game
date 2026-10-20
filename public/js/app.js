@@ -80,6 +80,9 @@ installSwipes({active:()=>!!S?.game,chatOpen:()=>drawerOpen,scoreOpen:()=>$('#mo
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeDrawer();if(['score','char'].includes($('#modal').dataset.kind))closeModal();}});
 $('#closeDrawer').onclick = closeDrawer;
 $('#scoreBtn').onclick = () => showScorecard();
+// The score bar doubles as the scorecard button on phones, where the side grips are hidden.
+$('#scoreboard').setAttribute('role', 'button'); $('#scoreboard').tabIndex = 0; $('#scoreboard').setAttribute('aria-label', 'Open scorecard');
+$('#scoreboard').onclick = () => S?.game && showScorecard(); $('#scoreboard').onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('#scoreboard').click(); } };
 $('#lobbyCharBtn').onclick = () => openCharModal();
 $('#drawerCharacter').onclick = () => openCharModal();
 $$('[data-chatform]').forEach((f) => f.addEventListener('submit', (e) => { e.preventDefault(); const i = $('input', f); if (i.value.trim()) socket.emit('chat', { text: i.value }); i.value = ''; }));
@@ -181,7 +184,7 @@ function renderChat() {
   $$('[data-chat]').forEach(el=>{if(el._html===html)return;const follow=!el._html||el.scrollHeight-el.scrollTop-el.clientHeight<45;el._html=html;el.innerHTML=html;if(follow)el.scrollTop=el.scrollHeight;});
   const n = S.room.chat.filter((m) => m.from).length;
   if (drawerOpen || !S.game) chatSeen = n;
-  $('#chatBadge').classList.toggle('hidden', n <= chatSeen);
+  for (const id of ['#chatBadge', '#chatGripBadge']) $(id).classList.toggle('hidden', n <= chatSeen);
 }
 
 const SETTINGS_FIELDS = [
@@ -266,7 +269,7 @@ function renderHandTracker(g) {
   else if (p.status === 'chasing') label = `${teamName(p.team)} · Need ${p.needed} to make ${p.amount}`;
   let detail = p.status === 'chasing' ? `Can give up ${p.cushion} more points` : p.status === 'secured' ? `${p.points[p.team] - p.amount} above the bid` : p.status === 'set' ? 'Keep playing for the final score' : 'Captured points appear after each trick';
   if(g.moon){label=g.moon.failed?'Moon failed: -500 at hand end':`Moon attempt: ${g.personalTricks[g.moon.seat]} / 9 personal tricks`;detail=g.moon.failed?'Someone else took a trick':`${seatName(g.moon.seat)} must win every trick: +500 or -500`;}
-  $('#handTracker').innerHTML = `<div class="hand-label"><span class="eyebrow">HAND ${g.handNo}</span><span>${g.trickNo} / 9 tricks</span></div>${[0, 1].map((t) => `<div class="hand-team t${t}"><div><span>${esc(teamName(t))}${g.bid?.team === t ? ' · bidding' : ''}</span><b>${p.points[t]}<small> pts</small></b></div><div class="points-track" role="progressbar" aria-label="${esc(teamName(t))} captured points" aria-valuemin="0" aria-valuemax="120" aria-valuenow="${p.points[t]}"><span style="width:${p.points[t] / 1.2}%"></span>${g.bid?.team === t && !g.moon ? `<i style="left:${g.bid.amount / 1.2}%" title="Bid ${g.bid.amount}"></i>` : ''}</div></div>`).join('')}<div class="bid-tracker ${p.status}" role="status"><strong>${esc(label)}</strong><span>${esc(detail)} · ${p.remaining} unawarded</span></div><span class="nest-note">Nest awarded on last trick</span>`;
+  $('#handTracker').innerHTML = `<div class="hand-label"><span class="eyebrow">HAND ${g.handNo}</span><span>${g.trickNo} / 9 tricks</span></div>${[0, 1].map((t) => `<div class="hand-team t${t}"><div><span>${esc(teamName(t))}${g.bid?.team === t ? ' · bidding' : ''}</span><b>${p.points[t]}<small> pts</small></b></div><div class="points-track" role="progressbar" aria-label="${esc(teamName(t))} captured points" aria-valuemin="0" aria-valuemax="120" aria-valuenow="${p.points[t]}"><span style="width:${p.points[t] / 1.2}%"></span>${g.bid?.team === t && !g.moon ? `<i style="left:${g.bid.amount / 1.2}%" title="Bid ${g.bid.amount}"></i>` : ''}</div></div>`).join('')}<div class="bid-tracker ${p.status}" role="status">${g.trump ? `<span class="ht-trump">${g.playMode === 'low' ? 'Low · ' : ''}${pill(g.trump)}</span>` : ''}<strong>${esc(label)}</strong><span>${esc(detail)} · ${p.remaining} unawarded</span></div><span class="nest-note">Nest awarded on last trick</span>`;
 }
 
 function statusText(g) {
@@ -334,7 +337,7 @@ function renderGame() {
     const pos = relPos(seat); const el = $('#seat-' + pos);
     const backs = !table && pos !== 'bottom' ? `<div class="backs">${'<div class="cb"></div>'.repeat(Math.min(g.handCounts[seat], 14))}</div>` : '';
     el.innerHTML = pos === 'top' ? backs + plateHTML(seat, g) : plateHTML(seat, g) + backs;
-    el.style.transform = ''; plates[pos] = el;
+    if (!table) el.style.transform = ''; plates[pos] = el; // the 3D table positions labels every frame
   }
   // trick logic
   let plays = g.trick, won = null;
@@ -447,7 +450,7 @@ function renderAction(g) {
   } else if ((g.phase === 'handOver' || g.phase === 'gameOver') && $('#modal').classList.contains('hidden') && shownRecapHand === g.recap?.handNo) {
     a.innerHTML = `<button class="btn primary" id="reopen">${g.phase === 'gameOver' ? 'See final results' : 'See hand recap'}</button>`; $('#reopen').onclick = showRecap;
   } else a.innerHTML = '';
-  if(g.phase==='playing'&&me>=0&&!g.autoFinish){const pre=document.createElement('div');pre.className='preplay-hint';pre.textContent=g.queuedCard?'Card queued - tap it again to cancel. Plays only if legal.':g.turn!==me?'Tap a card to pre-play it on your turn.':'';a.prepend(pre);}
+  if(g.phase==='playing'&&me>=0&&!g.autoFinish){const pre=document.createElement('div');pre.className='preplay-hint'+(g.queuedCard?' queued':'');pre.textContent=g.queuedCard?'Card queued - tap it again to cancel. Plays only if legal.':g.turn!==me?'Tap a card to pre-play it on your turn.':'';a.prepend(pre);}
 }
 
 function renderLog(g) { const el = $('#log');const sig=g.log.join('\n');if(el.dataset.signature===sig)return;el.dataset.signature=sig; el.innerHTML = g.log.map((l) => `<div>${esc(l.replace(/Seat (\d)/g, (_, n) => seatName(n - 1)))}</div>`).join(''); el.scrollTop = el.scrollHeight; }
