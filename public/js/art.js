@@ -87,6 +87,7 @@ export const CHARACTERS = [
   { label: 'Tatum', skin: '#3e2618', hair: '#16100c', style: 'long', shirt: '#8b5cf6' },
   { label: 'Ash', skin: '#c68863', hair: '#cfd2d6', style: 'bob', shirt: '#0f766e' },
   { label: 'Barbarian', model: 'barbarian', portrait: '/models/barbarian/portrait.png', skin: '#e5ad80', hair: '#f6c629', shirt: '#795039' },
+  { label: 'Melissa', skin: '#f1c7a5', hair: '#e6c16a', style: 'columbus', shirt: '#8b5cf6', outfit: 'cardigan' },
 ];
 import './style-options.js';
 export const charOf = (i, appearance = {}) => globalThis.RookStyle.apply(CHARACTERS[((Number(i) || 0) % CHARACTERS.length + CHARACTERS.length) % CHARACTERS.length], appearance);
@@ -99,6 +100,11 @@ export function avatarSVG(i, { ring = null, bg = true, appearance = {} } = {}) {
   const id = 'cl' + Math.random().toString(36).slice(2, 8);
   let back = '', front = '', hat = '', face = '';
   switch (c.style) {
+    case 'columbus':
+      back = `<path d="M24 44Q18 66 29 80L37 75L63 75L71 80Q82 66 76 44Z" fill="${H}"/>`;
+      front = `<path d="M26 45Q19 20 49 21Q80 19 75 45L64 34Q48 42 35 34Z" fill="${H}"/>`;
+      front += Array.from({length:18},(_,i)=>{const side=i%2?1:-1, y=34+Math.floor(i/2)*4.5,x=50+side*(24+Math.sin(i)*2);return `<path d="M${x} ${y}c-5-5-7 4-2 5s7-5 2-6" fill="none" stroke="${shade(H,-.22)}" stroke-width="1.5"/>`;}).join('');
+      break;
     case 'long': back = `<path d="M27 46 C25 72 30 86 38 88 L62 88 C70 86 75 72 73 46 Z" fill="${H}"/>`; front = `<path d="M29 46 C29 30 38 24 50 24 C62 24 71 30 71 46 C64 38 52 36 40 38 C35 40 31 43 29 46Z" fill="${H}"/>`; break;
     case 'bun': back = `<circle cx="50" cy="20" r="9" fill="${H}"/>`; front = `<path d="M29 46 C28 30 38 25 50 25 C62 25 72 30 71 46 C66 37 56 34 46 35 C38 36 32 40 29 46Z" fill="${H}"/>`; break;
     case 'afro': back = `<circle cx="50" cy="38" r="26" fill="${H}"/>`; front = `<path d="M30 44 C32 34 40 31 50 31 C60 31 68 34 70 44 C66 38 58 36 50 36 C42 36 34 38 30 44Z" fill="${H}"/>`; break;

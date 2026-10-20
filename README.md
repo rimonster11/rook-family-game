@@ -44,7 +44,7 @@ To share over the internet without hosting: `cloudflared tunnel --url http://loc
 | `maxBid` | 120 | |
 | `openerMustBid` | on | Player left of dealer bids first and must open at the minimum; if all others pass, they're stuck with it. Passed players can't re-enter. |
 | `allPassRule` | dealerStuck | Only used if `openerMustBid` is off: dealer stuck at min, or redeal. |
-| `rookAnytime` | on | Rook may be played on any trick even when you could follow. Either way: Rook counts as trump for following; if the Rook is led, trump must be followed; if trump is led and the Rook is your only trump you **must** play it. |
+| `allowLowCard` | off | Allows the bidder to choose high or low after taking the nest. The Rook always wins but must follow suit as trump; the former `rookAnytime` setting is ignored. |
 | `bidderLeads` | on | Winning bidder leads the first trick (off = player left of dealer). Trick winner leads next. |
 | `winRule` | bidderMustMake | A team can only win on a hand where it took the bid and made it, reaching ≥ target. Defending points count but can't trigger a win (480 → 510 on defense keeps playing). Alternative `anyReach`: first to target wins; if both cross, bidding team wins. |
 | `targetScore` | 500 | |
@@ -64,7 +64,7 @@ To share over the internet without hosting: `cloudflared tunnel --url http://loc
 ## Limitations
 - State is in memory: restarting the server ends all games. Idle rooms are purged after ~2 hours with nobody connected.
 - Identity is a random id in localStorage — reconnect works in the same browser only; no accounts/passwords. Anyone with the code can join/spectate.
-- Bots are simple heuristics (decent, not expert). No misdeal/redeal for counter-less hands, no renege penalties (illegal plays are blocked instead), no "shoot the moon".
+- Bots are simple heuristics (decent, not expert). No misdeal/redeal for counter-less hands, no renege penalties (illegal plays are blocked instead).
 - Single process; not designed for horizontal scaling.
 
 ## Look & feel (v2)
@@ -134,3 +134,55 @@ To share over the internet without hosting: `cloudflared tunnel --url http://loc
   mesh data goes to the system temp directory; the rendered lineup goes to
   `art-source/avatars/character-lineup.png`. This is a Blender geometry preview,
   not a screenshot of the browser's lighting or interface.
+
+## Table play update
+- **Pre-play:** tap a card while waiting. Tap again to cancel or another card to
+  replace it. Only that player sees the queue. The server rechecks legality on
+  the actual turn; an illegal choice is cleared without playing another card.
+- **Last trick:** open the small Last trick panel to review all four cards, their
+  players, the winner, and points. It stays available until the next completed
+  trick and resets when a new hand is dealt.
+- **Touch controls:** swipe left from the right Chat handle to open chat, and
+  right inside chat to close it. Swipe right from the left Scores handle to open
+  scores, and left on the score dialog to close. The score table itself retains
+  horizontal scrolling. Buttons and sticky close controls remain available.
+- **Follow suit:** the Rook belongs to trump. If a non-trump color is led and you
+  have it, you must play that color. Rook-led tricks require trump if available.
+- **Shoot the moon:** the bidder declares it when confirming the nest. All nine
+  tricks must be won by that individual, not their team. Success replaces the
+  bidding team's hand score with +500; failure replaces it with -500. Defenders
+  retain their captured points. A failed attempt still plays to the end.
+- **Low-card mode:** enable in House rules before starting. The bidder chooses
+  high or low with the nest. Low ranks beat high ranks within led/trump colors;
+  trump still beats other colors, Rook still beats all, and points never change.
+  Bots understand both orders but currently choose high when they win the bid.
+- **Chat bubbles and banter:** seated players' messages appear near their table
+  avatars for 6.5 seconds. Spectator messages stay in chat. Bots use premade lines
+  with a table-wide cooldown; they never inspect hidden cards for their banter.
+- **Melissa:** select Melissa or use Add Melissa in an empty lobby seat. Her
+  preset has blonde corkscrew curls and a lavender cardigan. Her bot includes
+  "This is the worst hand ever" and "I'm so gonna get set."
+- **Dealing:** a short shuffle and 41-card dealing sequence plays for a newly
+  dealt hand, without delaying controls or revealing hidden cards. Reduced-motion
+  preferences skip the sequence.
+- **Lay it down:** at the bidder's lead, the server proves a winning continuation
+  against every other seat, including their partner. It then plays one legal card
+  at a time, pausing between tricks. Proof search has a 35ms/25,000-node budget; if
+  it cannot prove the result in that budget, ordinary play continues. No hidden
+  hands or proof policy are sent to clients.
+- Mobile changes include 44px controls, safe-area/dynamic-height layouts, readable
+  inputs, landscape adjustments, preserved chat scroll, and fewer hand redraws.
+
+### Verify this update
+Run `npm test`, then `npm start`. Run `npm run e2e -- http://localhost:3000` for a
+full normal game. Set `$env:ROOK_E2E_MODE='low'` in PowerShell and repeat for low
+mode; remove it afterward with `Remove-Item Env:ROOK_E2E_MODE`. Tests cover socket
+queue privacy/execution, settings authorization, low ordering, moon outcomes,
+proof safety against exhaustive small-hand continuations, and gesture thresholds.
+
+Manual browser/device checks: select Melissa, fill a table with bots, pre-play and
+cancel a card, inspect Last trick after the next lead, swipe both panels while
+scrolled, send chat, and play a low hand. Check portrait/landscape on an actual
+phone and reduced motion. Socket tests do not validate browser layout or touch.
+Melissa geometry preview: `node scripts/preview-avatars.mjs --melissa`, followed
+by `blender --background --python scripts/render-avatar-preview.py -- --melissa`.

@@ -15,7 +15,8 @@ const DEFAULT_SETTINGS = Object.freeze({
   targetScore: 500,
   openerMustBid: true,   // player left of dealer must open at minBid (no all-pass possible)
   allPassRule: 'dealerStuck', // only used if openerMustBid=false: 'dealerStuck' | 'redeal'
-  rookAnytime: true,     // Rook may be played on any trick even if you can follow the led color
+  rookAnytime: false,    // retained for saved settings; follow-suit is always enforced
+  allowLowCard: false,
   bidderLeads: true,     // bidder leads first trick (false = player left of dealer)
   winRule: 'bidderMustMake', // 'bidderMustMake': only a bidding team that makes its bid can win;
                              // 'anyReach': any team reaching target wins (both over -> bidding team)
@@ -67,13 +68,11 @@ function legalPlays(hand, trick, trump, settings = DEFAULT_SETTINGS) {
   const led = effectiveSuit(trick[0].card, trump);
   const follow = hand.filter((c) => effectiveSuit(c, trump) === led);
   if (!follow.length) return hand.slice();
-  const rook = hand.find((c) => c.id === ROOK_ID);
-  if (rook && settings.rookAnytime && !follow.includes(rook)) follow.push(rook);
   return follow;
 }
 
 // trick: [{seat, card}] in play order. Returns winning seat.
-function trickWinner(trick, trump) {
+function trickWinner(trick, trump, mode = 'high') {
   const rook = trick.find((p) => p.card.id === ROOK_ID);
   if (rook) return rook.seat; // Rook is always the highest card
   const led = effectiveSuit(trick[0].card, trump);
@@ -81,7 +80,7 @@ function trickWinner(trick, trump) {
   for (const p of trick.slice(1)) {
     const bT = best.card.color === trump, pT = p.card.color === trump;
     if (pT && !bT) best = p;
-    else if (pT === bT && p.card.color === best.card.color && p.card.rank > best.card.rank) best = p;
+    else if (pT === bT && p.card.color === best.card.color && (mode === 'low' ? p.card.rank < best.card.rank : p.card.rank > best.card.rank)) best = p;
     else if (!pT && !bT && p.card.color === led && best.card.color !== led) best = p;
   }
   return best.seat;
@@ -133,6 +132,14 @@ function startHand(game, rng = Math.random, presetDeck = null) {
   game.lastTrick = null;
   game.taken = [[], []];        // cards captured per team
   game.tricksWon = [0, 0];
+  game.personalTricks = [0, 0, 0, 0];
+  game.playMode = 'high';
+  game.moon = null;
+  game.queued = [null, null, null, null];
+  game.autoFinish = false;
+  game._proofAt = -1;
+  game._autoPlan = null;
+  game.dealtAt = Date.now();
   game.trickNo = 0;
   game.played = [];             // all cards played this hand (for bots)
   game.turn = first;
@@ -215,8 +222,10 @@ function applyPass(game, seat) {
   advanceBidding(game);
 }
 
-function applyDiscard(game, seat, cardIds, trump) {
+function applyDiscard(game, seat, cardIds, trump, mode = 'high', moon = false) {
   requireTurn(game, 'nest', seat);
+  if (!['high', 'low'].includes(mode) || (mode === 'low' && !game.settings.allowLowCard)) throw new RuleError('Low-card play is not enabled');
+  if (typeof moon !== 'boolean') throw new RuleError('Choose a valid moon option');
   if (!COLORS.includes(trump)) throw new RuleError('Choose a trump color');
   if (!Array.isArray(cardIds) || new Set(cardIds).size !== NEST_SIZE || cardIds.length !== NEST_SIZE) throw new RuleError(`Discard exactly ${NEST_SIZE} different cards`);
   const hand = game.hands[seat];
@@ -229,10 +238,29 @@ function applyDiscard(game, seat, cardIds, trump) {
   game.hands[seat] = hand.filter((c) => !cardIds.includes(c.id));
   game.discard = disc;
   game.trump = trump;
+  game.playMode = mode;
+  game.moon = moon ? { seat, failed: false } : null;
   game.phase = 'playing';
   const leader = game.settings.bidderLeads ? seat : nextSeat(game.dealer);
   game.leader = leader; game.turn = leader;
   addLog(game, `Seat ${seat + 1} discards 5 and names ${COLOR_NAMES[trump]} trump.`);
+  if (mode === 'low') addLog(game, 'Low cards win; the Rook remains highest.');
+  if (moon) addLog(game, `Seat ${seat + 1} shoots the moon: win all 9 tricks personally for +500, otherwise -500.`);
+}
+
+function queuePlay(game, seat, cardId) {
+  if (!game || game.phase !== 'playing' || !Number.isInteger(seat) || seat < 0 || seat > 3 || game.autoFinish) throw new RuleError('Cannot pre-play now');
+  if (cardId === null) { game.queued[seat] = null; return; }
+  if (game.turn === seat) throw new RuleError('It is your turn; play a legal card');
+  if (!game.hands[seat].some(c => c.id === cardId)) throw new RuleError('Card not in hand');
+  game.queued[seat] = cardId;
+}
+
+function takeQueuedPlay(game) {
+  if (!game || game.phase !== 'playing') return null;
+  const seat = game.turn, id = game.queued[seat];
+  game.queued[seat] = null;
+  return id && legalPlays(game.hands[seat], game.trick, game.trump).some(c => c.id === id) ? id : null;
 }
 
 function applyPlay(game, seat, cardId) {
@@ -243,15 +271,18 @@ function applyPlay(game, seat, cardId) {
   const legal = legalPlays(hand, game.trick, game.trump, game.settings);
   if (!legal.some((c) => c.id === cardId)) throw new RuleError('You must follow the led color');
   game.hands[seat] = hand.filter((c) => c.id !== cardId);
+  game.queued[seat] = null;
   game.trick.push({ seat, card });
   game.played.push(card);
   if (game.trick.length < 4) { game.turn = nextSeat(seat); return null; }
   // Trick complete
-  const winner = trickWinner(game.trick, game.trump);
+  const winner = trickWinner(game.trick, game.trump, game.playMode);
   const team = teamOf(winner);
   const cards = game.trick.map((p) => p.card);
   game.taken[team].push(...cards);
   game.tricksWon[team] += 1;
+  game.personalTricks[winner] += 1;
+  if (game.moon && winner !== game.moon.seat) game.moon.failed = true;
   game.trickNo += 1;
   const isLast = game.hands.every((h) => h.length === 0);
   let pts = sumPoints(cards);
@@ -286,16 +317,22 @@ function decideWinner(scores, bid, made, settings) {
 
 function scoreHand(game, lastTrickSeat) {
   const pts = [sumPoints(game.taken[0]), sumPoints(game.taken[1])];
-  const { delta, made } = computeHandScore(game.bid, pts);
+  let { delta, made } = computeHandScore(game.bid, pts);
+  if (game.moon) {
+    made = !game.moon.failed && game.personalTricks[game.moon.seat] === HAND_SIZE;
+    delta[game.bid.team] = made ? 500 : -500;
+  }
   game.scores[0] += delta[0]; game.scores[1] += delta[1];
   const recap = {
     handNo: game.handNo, dealer: game.dealer, bid: game.bid, trump: game.trump, points: pts, delta, made,
     scores: game.scores.slice(), discard: game.discard.slice(), discardPoints: sumPoints(game.discard),
-    lastTrickSeat, tricksWon: game.tricksWon.slice(),
+    lastTrickSeat, tricksWon: game.tricksWon.slice(), moon: game.moon, playMode: game.playMode,
   };
   game.recap = recap;
   game.history.push(recap);
-  addLog(game, `Hand over: Team ${game.bid.team + 1} ${made ? 'made' : 'was SET on'} ${game.bid.amount}. Points ${pts[0]}-${pts[1]}.`);
+  addLog(game, game.moon
+    ? `Hand over: Team ${game.bid.team + 1} ${made ? 'shot the moon (+500)' : 'missed the moon (-500)'}. Points ${pts[0]}-${pts[1]}.`
+    : `Hand over: Team ${game.bid.team + 1} ${made ? 'made' : 'was SET on'} ${game.bid.amount}. Points ${pts[0]}-${pts[1]}.`);
   const w = decideWinner(game.scores, game.bid, made, game.settings);
   if (w !== null) { game.winner = w; game.phase = 'gameOver'; addLog(game, `Team ${w + 1} wins the game!`); }
   else game.phase = 'handOver';
@@ -318,10 +355,13 @@ function viewFor(game, seat) {
     bidding: game.phase === 'bidding' ? { ...game.bidding } : { history: game.bidding.history, highBid: game.bidding.highBid, highBidder: game.bidding.highBidder },
     recap: game.recap, history: game.history, winner: game.winner, log: game.log.slice(-25),
     capturedPoints: [sumPoints(game.taken[0]), sumPoints(game.taken[1])],
+    playMode: game.playMode, moon: game.moon, personalTricks: game.personalTricks,
+    autoFinish: game.autoFinish, dealtAt: game.dealtAt, queuedCard: null,
     hand: [], legal: [], validBids: [], canPass: false,
   };
   if (seat !== null && seat !== undefined) {
     v.hand = sortHand(game.hands[seat], game.trump);
+    v.queuedCard = game.queued[seat];
     if (game.phase === 'playing' && game.turn === seat) v.legal = legalPlays(game.hands[seat], game.trick, game.trump, game.settings).map((c) => c.id);
     if (game.phase === 'bidding' && game.turn === seat) { v.validBids = validBids(game); v.canPass = canPass(game, seat); }
     if (game.bid && game.bid.seat === seat && game.phase !== 'nest') v.myDiscard = game.discard;
@@ -333,5 +373,5 @@ module.exports = {
   COLORS, COLOR_NAMES, ROOK_ID, DEFAULT_SETTINGS, RuleError, HAND_SIZE, NEST_SIZE,
   makeDeck, cardFromId, cardPoints, sumPoints, shuffle, teamOf, nextSeat, effectiveSuit,
   legalPlays, trickWinner, sortHand, newGame, startHand, validBids, canPass,
-  applyBid, applyPass, applyDiscard, applyPlay, computeHandScore, decideWinner, scoreHand, nextHand, viewFor,
+  applyBid, applyPass, applyDiscard, applyPlay, queuePlay, takeQueuedPlay, computeHandScore, decideWinner, scoreHand, nextHand, viewFor,
 };

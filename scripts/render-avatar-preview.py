@@ -1,5 +1,5 @@
 """Render actual Three.js avatar meshes exported by preview-avatars.mjs."""
-import bpy,json,tempfile
+import bpy,json,tempfile,sys
 from pathlib import Path
 from mathutils import Vector
 root=Path(__file__).resolve().parents[1]
@@ -32,4 +32,6 @@ for loc,power,size in [((-3,-4,6),700,5),((4,-3,3),400,5),((0,3,5),800,4)]:
     obj=bpy.data.objects.new('Softbox',light);scene.collection.objects.link(obj);obj.location=loc;aim(obj,(0,0,1.7))
 cam=bpy.data.cameras.new('Camera');obj=bpy.data.objects.new('Camera',cam);scene.collection.objects.link(obj)
 obj.location=(0,-10,1.8);aim(obj,(0,0,1.8));cam.type='ORTHO';cam.ortho_scale=6.0;scene.camera=obj
-scene.render.filepath=str(root/'art-source/avatars/character-lineup.png');bpy.ops.render.render(write_still=True)
+output=root/('art-source/melissa/character-lineup.png' if '--melissa' in sys.argv else 'art-source/avatars/character-lineup.png')
+output.parent.mkdir(parents=True,exist_ok=True)
+scene.render.filepath=str(output);bpy.ops.render.render(write_still=True)

@@ -1,0 +1,35 @@
+/* Table conveniences share the existing navy, felt and gold theme. */
+.panel-grip{position:absolute;z-index:12;top:44%;min-height:48px;padding:10px 7px;background:#183f68;color:#ffe4aa;border:1px solid #93b9d5;font:15px var(--display);touch-action:pan-y;cursor:pointer}
+.score-grip{left:0;border-radius:0 12px 12px 0}.chat-grip{right:0;border-radius:12px 0 0 12px}
+.drawer{touch-action:pan-y;overscroll-behavior:contain;padding-bottom:max(14px,env(safe-area-inset-bottom))}
+.drawer-head{position:sticky;top:-14px;background:#122e4d;z-index:2;padding:8px;border-radius:12px}
+.drawer-head::after{content:'Swipe right to close';font:11px var(--font);color:#c7d9ed}
+.k-score{touch-action:pan-y}.swipe-heading{position:sticky;top:-24px;z-index:2;background:#173354;padding:10px;margin-top:0}
+.swipe-heading small{display:block;font:12px var(--font);color:#c7d9ed}
+.k-score .modal-btns{position:sticky;bottom:-24px;background:#102846;padding:10px}
+.sc-wrap{touch-action:pan-x pan-y;overscroll-behavior:contain}
+.recent-trick{position:absolute;z-index:11;right:10px;top:150px;width:min(330px,calc(100vw - 20px));background:#102d50ee;border:1px solid #92b5cf;border-radius:14px;box-shadow:0 5px 20px #0003}
+.recent-trick:not([open]){width:auto}.recent-trick summary{padding:10px 14px;font:17px var(--display);color:#ffe2a0;cursor:pointer;min-height:44px}
+.recent-trick p{font-size:12px;margin:0 12px 10px}.recent-cards{display:flex;justify-content:space-around;padding:0 10px 12px;gap:5px}
+.recent-cards>div{flex:1;min-width:0;text-align:center}.recent-cards .card{margin:0 auto}.recent-cards span{display:block;font-size:11px;overflow-wrap:anywhere;margin-top:5px}
+.trick-winner .card{outline:3px solid #ffe2a0}.trick-winner span{color:#ffe2a0}
+.player-bubble{position:absolute;bottom:calc(100% + 9px);left:50%;transform:translateX(-50%);width:max-content;max-width:195px;background:#fff7df;color:#23364d;padding:10px 12px;border-radius:15px 15px 15px 3px;font:14px var(--font);font-weight:750;line-height:1.3;overflow-wrap:anywhere;box-shadow:0 4px 10px #0004;z-index:8;pointer-events:none;animation:bubble-life 6.5s both;animation-delay:var(--age,0ms)}
+.player-bubble::after{content:'';position:absolute;bottom:-7px;left:45%;border-left:8px solid transparent;border-top:8px solid #fff7df}
+.plate{position:relative}.pos-left .player-bubble{left:0;transform:none}.pos-right .player-bubble{left:auto;right:0;transform:none}
+@keyframes bubble-life{0%{opacity:0}5%,92%{opacity:1}100%{opacity:0}}
+.hand .card.queued-card{transform:translateX(var(--x)) translateY(calc(var(--y) - 24px)) rotate(var(--r));box-shadow:0 0 0 3px #f8d57b,0 10px 20px #0005}
+.queued-card::after{content:'QUEUED';position:absolute;bottom:0;left:0;right:0;text-align:center;font:11px var(--display);background:#f8d57b;color:#18304d;padding:3px}
+.hand .card:focus-visible{outline:3px solid #ffe4aa;outline-offset:3px}.hand{touch-action:pan-x}
+.preplay-hint{font-size:12px;color:#e6d7b0;text-align:center;padding:4px 8px}
+.nestpanel{flex-wrap:wrap}.nest-options{display:grid;gap:6px;max-width:300px;font-size:13px;text-align:left}.nest-options label{display:flex;align-items:center;gap:8px}.nest-options select{font-size:14px;padding:6px}.nest-options input{width:22px;height:22px}.nest-options small{color:#c7d9ed;line-height:1.4}
+.moon-banner{background:#e8c785;color:#243852;border-radius:12px;padding:12px;font:20px var(--display)}
+.deal-sequence{position:absolute;inset:0;pointer-events:none;z-index:6;overflow:hidden;contain:strict}.shuffle-stack,.deal-flight{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)}
+.shuffle-stack{animation:shuffle-hide .75s both}.shuffle-stack .card{position:absolute;top:-40px;left:-25px;animation:shuffle-riffle .22s alternate 3}.shuffle-stack .card:nth-child(2){animation-direction:alternate-reverse;rotate:8deg}.shuffle-stack .card:nth-child(3){rotate:-8deg;animation-delay:80ms}.shuffle-stack b{position:absolute;top:45px;left:-55px;width:110px;color:#ffe4aa;font:19px var(--display)}
+.deal-flight{opacity:0;animation:deal-flight .42s ease-out both;animation-delay:var(--delay)}
+@keyframes shuffle-riffle{from{translate:-20px 0;rotate:-12deg}to{translate:20px -9px;rotate:12deg}}
+@keyframes shuffle-hide{0%,90%{opacity:1}100%{opacity:0}}
+@keyframes deal-flight{0%{opacity:0;transform:translate(-50%,-50%) scale(.9)}10%,75%{opacity:1}100%{opacity:0;transform:translate(calc(-50% + var(--dx)),calc(-50% + var(--dy))) scale(.65)}}
+@media(pointer:coarse){button,.btn,summary{min-height:44px}.style-choice.swatch{min-width:44px;min-height:44px}input,select,textarea{font-size:16px!important}.hand .card.legal:hover{transform:translateX(var(--x)) translateY(var(--y)) rotate(var(--r))}.hand .card.picked,.hand .card.queued-card{transform:translateX(var(--x)) translateY(calc(var(--y) - 24px)) rotate(var(--r))}}
+@media(max-width:640px){.recent-trick{top:150px}.recent-trick summary{font-size:14px;padding:9px}.panel-grip{font-size:12px;padding:8px 4px}.player-bubble{max-width:145px;font-size:12px;padding:8px}.nest-options{max-width:none;flex-basis:100%;padding:0 8px}.nest-options small{font-size:11px}.nestpanel{gap:5px;padding:6px}.game-wrap{min-height:0}.action{max-height:38dvh;overflow-y:auto;overscroll-behavior:contain}.hand-wrap{flex-shrink:0}.drawer-head::after{font-size:10px}.k-score{padding:14px}.k-score .sc{font-size:12px}.k-score .swipe-heading{top:-14px}.k-score .modal-btns{bottom:-14px}.modal-card{max-height:calc(100dvh - 30px)}#game{height:100dvh;min-height:100dvh}.hand-tracker .nest-note{display:none}.character-types .char-opt svg{width:45px;height:45px}}
+@media(max-height:650px) and (orientation:landscape){#game{overflow:hidden}.game-wrap{min-height:0}.hand-tracker{padding:3px 10px}.hand-tracker .bid-tracker,.hand-tracker .nest-note{display:none}.hand-wrap{height:110px;--ch:90px;--cw:64px}.action{position:absolute;z-index:8;left:12%;right:12%;bottom:110px;max-height:35dvh;overflow:auto}.recent-trick{top:95px}.game-top{padding:3px 10px}.status{font-size:12px!important}.player-bubble{max-width:150px;font-size:11px}}
+@media(prefers-reduced-motion:reduce){.deal-sequence{display:none}.player-bubble{animation:none}.drawer,.hand .card{transition:none}.hand .card.deal{animation:none}}

@@ -6,7 +6,7 @@
     hair: ['#24170f', '#6b4423', '#c9a46a', '#b5482b', '#cfd2d6', '#16100c'],
     hat: ['none', 'cap', 'beanie', 'headband', 'bowler', 'cowboy'],
     glasses: ['none', 'round', 'square', 'shades'],
-    style: ['short', 'swept', 'bob', 'long', 'bun', 'curly', 'afro', 'bald'],
+    style: ['short', 'swept', 'bob', 'long', 'bun', 'curly', 'afro', 'bald', 'columbus'],
     expression: ['smile', 'grin', 'calm', 'happy', 'wink'],
     outfit: ['crew', 'hoodie', 'jacket', 'cardigan'],
     accessory: ['none', 'studs', 'hoops', 'necklace', 'scarf'],
@@ -38,7 +38,7 @@
     result.hatColor = result.palette.secondary;
     return result;
   }
-  const api = { options, palettes, normalize, apply, characterCount: 13 };
+  const api = { options, palettes, normalize, apply, characterCount: 14 };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.RookStyle = api;
 })(globalThis);

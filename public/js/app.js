@@ -1,6 +1,7 @@
 /* Rook Night client */
 import { cardHTML, backHTML, birdSVG, SUIT, cardPts, CHARACTERS, charOf, avatarSVG } from './art.js';
 import './hand-progress.js';
+import { installSwipes, animateDeal } from './table-experience.js';
 import { icon, wordmark } from './ui-art.js';
 const Style = globalThis.RookStyle;
 let appearance = {};
@@ -16,9 +17,11 @@ let playerId = localStorage.getItem('rook.playerId');
 if (!playerId) { playerId = (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2) + Date.now()); localStorage.setItem('rook.playerId', playerId); }
 let charIdx = Number(localStorage.getItem('rook.char') ?? 0);
 if (!(charIdx >= 0 && charIdx < NCH)) charIdx = Math.floor(Math.random() * NCH);
-if (new URLSearchParams(location.search).get('character') === 'barbarian') charIdx = NCH - 1;
+if (new URLSearchParams(location.search).get('character') === 'barbarian') charIdx = 12;
+if (new URLSearchParams(location.search).get('character') === 'melissa') charIdx = 13;
 if (new URLSearchParams(location.search).get('character') === 'basic') charIdx = 0;
 let S = null, picked = new Set(), pickedTrump = null, lastTrickShownNo = 0, lastTrickUntil = 0, shownRecapHand = 0, chatSeen = 0, drawerOpen = false;
+let pickedMode='high', pickedMoon=false, dealKey='', bubbleTimer=null;
 let prevHandIds = null, nestIds = new Set(), bidChoice = null, lastHandNo = 0;
 
 // ---------- graphics mode ----------
@@ -69,7 +72,11 @@ $('#copyLink').onclick = copyInvite; $('#drawerInvite').onclick = copyInvite;
 $('#fillBotsBtn').onclick = () => socket.emit('fillBots');
 $('#startBtn').onclick = () => socket.emit('start');
 const closeDrawer = () => { drawerOpen = false; $('#drawer').classList.remove('open'); };
-$('#chatToggle').onclick = () => { drawerOpen = !drawerOpen; $('#drawer').classList.toggle('open', drawerOpen); renderChat(); };
+const openDrawer = () => { drawerOpen=true; $('#drawer').classList.add('open'); renderChat(); };
+$('#chatToggle').onclick = () => drawerOpen ? closeDrawer() : openDrawer();
+$('#chatGrip').onclick = openDrawer; $('#scoreGrip').onclick = showScorecard;
+installSwipes({active:()=>!!S?.game,chatOpen:()=>drawerOpen,scoreOpen:()=>$('#modal').dataset.kind==='score',openChat:openDrawer,closeChat:closeDrawer,openScore:showScorecard,closeScore:closeModal});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeDrawer();if(['score','char'].includes($('#modal').dataset.kind))closeModal();}});
 $('#closeDrawer').onclick = closeDrawer;
 $('#scoreBtn').onclick = () => showScorecard();
 $('#lobbyCharBtn').onclick = () => openCharModal();
@@ -82,18 +89,21 @@ renderGfxSeg();
 
 // ---------- character select ----------
 function renderCharGrid(el, onPick) {
-  const regular = charOf(charIdx).model ? 0 : charIdx;
+  const regular = charIdx >= 12 ? 0 : charIdx;
   el.classList.add('character-types');
-  el.innerHTML = [[regular,'Your character','Make it yours'],[12,'Barbarian','Special character']].map(([i,label,hint]) => `<button type="button" class="char-opt ${i === charIdx ? 'sel' : ''}" data-ch="${i}" aria-pressed="${i === charIdx}" aria-label="${label}">${avatarSVG(i, { appearance: i===regular ? appearance : {} })}<span>${label}</span><small>${hint}</small></button>`).join('');
+  el.innerHTML = [[regular,'Your character','Make it yours'],[13,'Melissa','Blonde corkscrew curls'],[12,'Barbarian','Special character']].map(([i,label,hint]) => `<button type="button" class="char-opt ${i === charIdx ? 'sel' : ''}" data-ch="${i}" aria-pressed="${i === charIdx}" aria-label="${label}">${avatarSVG(i, { appearance: i===regular ? appearance : {} })}<span>${label}</span><small>${hint}</small></button>`).join('');
   $$('[data-ch]', el).forEach((b) => (b.onclick = () => onPick(+b.dataset.ch)));
 }
 function pickChar(i) {
+  if(i===13&&charIdx!==13){appearance={};localStorage.setItem('rook.appearance','{}');}
   charIdx = ((i % NCH) + NCH) % NCH; localStorage.setItem('rook.char', charIdx);
-  renderCharGrid($('#charGrid'), pickChar); $('#charLabel').textContent = charOf(charIdx).model ? 'Barbarian' : 'Your character';
+  renderCharGrid($('#charGrid'), pickChar); $('#charLabel').textContent = charIdx >= 12 ? charOf(charIdx).label : 'Your character';
   $('#preview2d').innerHTML = avatarSVG(charIdx, { appearance }); if (preview) preview.set(charIdx, appearance);
   renderAppearance($('#appearanceControls'), () => pickChar(charIdx));
 }
-$('#charPrev').onclick = $('#charNext').onclick = () => pickChar(charOf(charIdx).model ? 0 : 12);
+const characterCycle=[0,13,12];
+$('#charPrev').onclick = () => pickChar(characterCycle[(characterCycle.indexOf(charIdx)+2)%3]);
+$('#charNext').onclick = () => pickChar(characterCycle[(characterCycle.indexOf(charIdx)+1)%3]);
 pickChar(charIdx);
 function startPreview() {
   if (preview || gfx === '2d') { $('#charPreview').classList.toggle('flat', !preview); return; }
@@ -114,7 +124,7 @@ function renderAppearance(el, changed) {
   ];
   const group = groups.find((g)=>g.id===el.dataset.category) || groups[0];
   const labels = {skin:'Skin tone',expression:'Expression',eyeColor:'Eye color',facialHair:'Facial hair',style:'Hairstyle',hair:'Hair color',outfit:'Outfit style',shirt:'Color theme',hat:'Headwear',glasses:'Glasses',accessory:'Accessories'};
-  const names = {skin:['Porcelain','Peach','Tan','Bronze','Brown','Deep'],hair:['Espresso','Chestnut','Blond','Copper','Silver','Black'],eyeColor:['Brown','Teal','Blue','Hazel'],style:['Crop','Side sweep','Bob','Long','Bun','Curls','Afro','Shaved'],expression:['Soft smile','Big grin','Calm','Joyful','Wink'],outfit:['Everyday','Hoodie','Jacket','Cardigan'],accessory:['None','Studs','Hoops','Pendant','Scarf'],facialHair:['None','Mustache','Beard'],hat:['None','Cap','Beanie','Headband','Bowler','Cowboy'],glasses:['None','Round','Square','Sunglasses']};
+  const names = {skin:['Porcelain','Peach','Tan','Bronze','Brown','Deep'],hair:['Espresso','Chestnut','Blond','Copper','Silver','Black'],eyeColor:['Brown','Teal','Blue','Hazel'],style:['Crop','Side sweep','Bob','Long','Bun','Curls','Afro','Shaved','Corkscrew curls'],expression:['Soft smile','Big grin','Calm','Joyful','Wink'],outfit:['Everyday','Hoodie','Jacket','Cardigan'],accessory:['None','Studs','Hoops','Pendant','Scarf'],facialHair:['None','Mustache','Beard'],hat:['None','Cap','Beanie','Headband','Bowler','Cowboy'],glasses:['None','Round','Square','Sunglasses']};
   const look=charOf(charIdx,appearance);
   el.innerHTML=`<div class="look-tabs" role="group" aria-label="Customize your character">${groups.map(g=>`<button type="button" data-category="${g.id}" aria-pressed="${g.id===group.id}">${icon(g.art)}<span>${g.label}</span></button>`).join('')}</div>` + group.keys.map(key=>`<fieldset class="style-row"><legend>${labels[key]}</legend><div class="style-choices ${key==='shirt'?'palette-choices':''}">${Style.options[key].map((value,i)=>{
     const palette=key==='shirt'?Style.palettes[i]:null;
@@ -167,34 +177,36 @@ function render() {
 function renderChat() {
   if (!S) return;
   const html = S.room.chat.map((m) => m.from ? `<div class="m"><b>${esc(m.from)}</b> ${esc(m.text)}</div>` : `<div class="m sys">${esc(m.text)}</div>`).join('');
-  $$('[data-chat]').forEach((el) => { el.innerHTML = html; el.scrollTop = el.scrollHeight; });
+  $$('[data-chat]').forEach(el=>{if(el._html===html)return;const follow=!el._html||el.scrollHeight-el.scrollTop-el.clientHeight<45;el._html=html;el.innerHTML=html;if(follow)el.scrollTop=el.scrollHeight;});
   const n = S.room.chat.filter((m) => m.from).length;
   if (drawerOpen || !S.game) chatSeen = n;
   $('#chatBadge').classList.toggle('hidden', n <= chatSeen);
 }
 
 const SETTINGS_FIELDS = [
-  ['minBid', 'number', 'Minimum / opening bid', 'Player left of dealer must open at this amount.'],
-  ['bidIncrement', 'number', 'Bids in multiples of', 'Players may jump to any higher multiple.'],
+  ['minBid', 'number', 'Opening bid', 'The first bid starts here.'],
+  ['bidIncrement', 'number', 'Bid step', 'Raise by this amount, or jump to a higher multiple.'],
   ['maxBid', 'number', 'Maximum bid'],
-  ['targetScore', 'number', 'Play to'],
-  ['openerMustBid', 'checkbox', 'Opener must bid (no all-pass)', 'Off: opener may pass; see all-pass rule.'],
+  ['targetScore', 'number', 'Winning score'],
+  ['openerMustBid', 'checkbox', 'Opening player must bid', 'Turn off to let the first player pass.'],
   ['allPassRule', ['dealerStuck', 'redeal'], 'If everyone passes', 'Only applies when the opener may pass.'],
-  ['rookAnytime', 'checkbox', 'Rook may be played any time', 'Rook is always part of trump; if trump is led and it is your only trump you must play it.'],
+  ['allowLowCard', 'checkbox', 'Allow low-card hands', 'The bidder chooses high or low after taking the nest. Rook always wins; everyone must follow suit.'],
   ['bidderLeads', 'checkbox', 'Winning bidder leads first trick', 'Off: player left of dealer leads.'],
-  ['winRule', ['bidderMustMake', 'anyReach'], 'How to win', 'bidderMustMake: you can only win on a hand where your team took the bid and made it.'],
-  ['flipNestCard', 'checkbox', 'Flip top nest card during bidding'],
-  ['botDelayMs', 'number', 'Bot thinking time (ms)'],
+  ['winRule', ['bidderMustMake', 'anyReach'], 'How to win', 'Choose whether the winning team must also make its bid.'],
+  ['flipNestCard', 'checkbox', 'Show one nest card', 'A little clue while everyone bids.'],
+  ['botDelayMs', 'number', 'Bot pace (ms)', '700 is relaxed. 200 is quick.'],
 ];
+const SETTING_LABELS = { dealerStuck: 'Dealer takes the minimum', redeal: 'Shuffle and deal again', bidderMustMake: 'Make your bid to win', anyReach: 'First team to the target' };
 function renderSettings() {
   const f = $('#settingsForm'); const s = S.room.settings; const locked = !S.you.isHost;
   if (f.contains(document.activeElement)) return;
   f.innerHTML = SETTINGS_FIELDS.map(([k, type, label, help]) => {
     let inp;
-    if (Array.isArray(type)) inp = `<select name="${k}" ${locked ? 'disabled' : ''}>${type.map((o) => `<option ${s[k] === o ? 'selected' : ''}>${o}</option>`).join('')}</select>`;
-    else if (type === 'checkbox') inp = `<label class="switch"><input type="checkbox" name="${k}" ${s[k] ? 'checked' : ''} ${locked ? 'disabled' : ''}><span></span></label>`;
-    else inp = `<input type="number" name="${k}" value="${s[k]}" step="${k === 'botDelayMs' ? 100 : 5}" ${locked ? 'disabled' : ''}>`;
-    return `<div class="set-row ${type === 'checkbox' ? 'inline' : ''}"><div class="set-l">${label}${help ? `<div class="help">${help}</div>` : ''}</div>${inp}</div>`;
+    const a11y = `id="setting-${k}" aria-labelledby="label-${k}" ${help ? `aria-describedby="help-${k}"` : ''}`;
+    if (Array.isArray(type)) inp = `<select name="${k}" ${a11y} ${locked ? 'disabled' : ''}>${type.map((o) => `<option value="${o}" ${s[k] === o ? 'selected' : ''}>${SETTING_LABELS[o] || o}</option>`).join('')}</select>`;
+    else if (type === 'checkbox') inp = `<label class="switch"><input type="checkbox" name="${k}" ${a11y} ${s[k] ? 'checked' : ''} ${locked ? 'disabled' : ''}><span aria-hidden="true"></span></label>`;
+    else inp = `<input type="number" name="${k}" ${a11y} value="${s[k]}" step="${k === 'botDelayMs' ? 100 : 5}" ${locked ? 'disabled' : ''}>`;
+    return `<div class="set-row ${type === 'checkbox' ? 'inline' : ''} ${Array.isArray(type) ? 'select-row' : ''}"><div class="set-l"><label id="label-${k}" for="setting-${k}">${label}</label>${help ? `<div class="help" id="help-${k}">${help}</div>` : ''}</div>${inp}</div>`;
   }).join('') + (locked ? '<div class="help center">Only the host can change these.</div>' : '');
   $$('input,select', f).forEach((el) => el.addEventListener('change', () => {
     const v = el.type === 'checkbox' ? el.checked : el.type === 'number' ? Number(el.value) : el.value;
@@ -213,6 +225,7 @@ function renderLobby() {
     let btns = '';
     if (!s || (s.type === 'bot' && !mine)) btns += `<button class="btn tiny primary" data-sit="${i}">${icon('people')}Sit here</button>`;
     if (mine) btns += `<button class="btn tiny outline" data-stand>Stand up</button>`;
+    if (host && !s) btns += `<button class="btn tiny outline" data-melissa="${i}">Add Melissa</button>`;
     if (host && !s) btns += `<button class="btn tiny outline" data-bot="${i}">${icon('bot')}Add bot</button>`;
     if (host && s?.type === 'bot') btns += `<button class="btn tiny ghost" data-clear="${i}">Remove</button>`;
     return `<div class="lseat t${i % 2} ${mine ? 'mine' : ''}" style="--seat-order:${[0, 2, 1, 3][i]}"><div class="seatno">Seat ${i + 1}${mine ? ' · You' : ''}</div><div class="seat-team"><span class="tdot t${i % 2}"></span>${esc(teamName(i % 2))}</div>${who}<div class="btns">${btns}</div></div>`;
@@ -220,6 +233,7 @@ function renderLobby() {
   $$('[data-sit]').forEach((b) => (b.onclick = () => socket.emit('sit', { seat: +b.dataset.sit })));
   $$('[data-stand]').forEach((b) => (b.onclick = () => socket.emit('stand')));
   $$('[data-bot]').forEach((b) => (b.onclick = () => socket.emit('addBot', { seat: +b.dataset.bot })));
+  $$('[data-melissa]').forEach(b => b.onclick=()=>socket.emit('addBot',{seat:+b.dataset.melissa,character:13}));
   $$('[data-clear]').forEach((b) => (b.onclick = () => socket.emit('clearSeat', { seat: +b.dataset.clear })));
   const full = S.room.seats.every(Boolean);
   $('#startBtn').classList.toggle('hidden', !host); $('#fillBotsBtn').classList.toggle('hidden', !host || full);
@@ -249,8 +263,9 @@ function renderHandTracker(g) {
   if (p.status === 'secured') label = `${teamName(p.team)} · Bid secured`;
   else if (p.status === 'set') label = `${teamName(p.team)} · Set — cannot make ${p.amount}`;
   else if (p.status === 'chasing') label = `${teamName(p.team)} · Need ${p.needed} to make ${p.amount}`;
-  const detail = p.status === 'chasing' ? `Can give up ${p.cushion} more points` : p.status === 'secured' ? `${p.points[p.team] - p.amount} above the bid` : p.status === 'set' ? 'Keep playing for the final score' : 'Captured points appear after each trick';
-  $('#handTracker').innerHTML = `<div class="hand-label"><span class="eyebrow">HAND ${g.handNo}</span><span>${g.trickNo} / 9 tricks</span></div>${[0, 1].map((t) => `<div class="hand-team t${t}"><div><span>${esc(teamName(t))}${g.bid?.team === t ? ' · bidding' : ''}</span><b>${p.points[t]}<small> pts</small></b></div><div class="points-track" role="progressbar" aria-label="${esc(teamName(t))} captured points" aria-valuemin="0" aria-valuemax="120" aria-valuenow="${p.points[t]}"><span style="width:${p.points[t] / 1.2}%"></span>${g.bid?.team === t ? `<i style="left:${g.bid.amount / 1.2}%" title="Bid ${g.bid.amount}"></i>` : ''}</div></div>`).join('')}<div class="bid-tracker ${p.status}" role="status"><strong>${esc(label)}</strong><span>${esc(detail)} · ${p.remaining} unawarded</span></div><span class="nest-note">Nest awarded on last trick</span>`;
+  let detail = p.status === 'chasing' ? `Can give up ${p.cushion} more points` : p.status === 'secured' ? `${p.points[p.team] - p.amount} above the bid` : p.status === 'set' ? 'Keep playing for the final score' : 'Captured points appear after each trick';
+  if(g.moon){label=g.moon.failed?'Moon failed: -500 at hand end':`Moon attempt: ${g.personalTricks[g.moon.seat]} / 9 personal tricks`;detail=g.moon.failed?'Someone else took a trick':`${seatName(g.moon.seat)} must win every trick: +500 or -500`;}
+  $('#handTracker').innerHTML = `<div class="hand-label"><span class="eyebrow">HAND ${g.handNo}</span><span>${g.trickNo} / 9 tricks</span></div>${[0, 1].map((t) => `<div class="hand-team t${t}"><div><span>${esc(teamName(t))}${g.bid?.team === t ? ' · bidding' : ''}</span><b>${p.points[t]}<small> pts</small></b></div><div class="points-track" role="progressbar" aria-label="${esc(teamName(t))} captured points" aria-valuemin="0" aria-valuemax="120" aria-valuenow="${p.points[t]}"><span style="width:${p.points[t] / 1.2}%"></span>${g.bid?.team === t && !g.moon ? `<i style="left:${g.bid.amount / 1.2}%" title="Bid ${g.bid.amount}"></i>` : ''}</div></div>`).join('')}<div class="bid-tracker ${p.status}" role="status"><strong>${esc(label)}</strong><span>${esc(detail)} · ${p.remaining} unawarded</span></div><span class="nest-note">Nest awarded on last trick</span>`;
 }
 
 function statusText(g) {
@@ -259,7 +274,7 @@ function statusText(g) {
   switch (g.phase) {
     case 'bidding': return [mine ? 'Your bid' : `${who} is bidding…`, mine];
     case 'nest': return [mine ? 'You won the bid — bury 5 cards and name trump' : `${who} is looking at the nest…`, mine];
-    case 'playing': return [mine ? (g.trick.length ? 'Your turn — follow the led color if you can' : 'Your lead') : `${who}'s turn`, mine];
+    case 'playing': if(g.autoFinish)return ['Laying it down: playing out guaranteed winners',false]; return [mine ? (g.trick.length ? 'Your turn — follow the led color if you can' : 'Your lead') : `${who}'s turn`, mine];
     case 'handOver': return ['Hand complete', false];
     case 'gameOver': return [`Game over — ${teamName(g.winner)} win!`, false];
   }
@@ -288,6 +303,8 @@ function plateHTML(seat, g) {
     if (g.bidding.passed?.[seat]) bubble = '<span class="bubble off">Pass</span>';
     else if (h) bubble = `<span class="bubble">${h.bid}</span>`;
   }
+  const message=[...S.room.chat].reverse().find(m=>m.seat===seat && m.from && Date.now()-m.t<6500);
+  if(message) bubble=`<span class="player-bubble" role="status" style="--age:-${Math.max(0,Date.now()-message.t)}ms">${esc(message.text)}</span>`;
   const away = s?.type === 'human' && !s.connected;
   return `<div class="plate t${seat % 2} ${g.turn === seat && g.phase !== 'handOver' && g.phase !== 'gameOver' ? 'turn' : ''} ${away ? 'away' : ''}">${bubble}
     <div class="pava">${ava(seat, TEAM_HEX[seat % 2])}</div><div class="pinfo"><div class="nmrow"><span class="nm">${esc(s?.name)}${seat === me ? ' (you)' : ''}</span>${s?.type === 'bot' ? '<span class="botbadge">BOT</span>' : ''}</div>
@@ -295,7 +312,16 @@ function plateHTML(seat, g) {
 }
 
 function renderGame() {
+  if(!S?.game)return;
   const g = S.game; const me = S.you.seat;
+  clearTimeout(bubbleTimer);
+  const fresh=S.room.chat.filter(m=>m.from && Date.now()-m.t<6500);
+  if(fresh.length) bubbleTimer=setTimeout(()=>S?.game&&renderGame(),Math.max(50,Math.min(...fresh.map(m=>6500-(Date.now()-m.t)))+20));
+  const last=g.lastTrick;
+  const recent=$('#recentTrickCards');
+  const lastKey=`${S.room.code}:${g.handNo}:${last?.no||0}`;
+  if(recent.dataset.key!==lastKey){recent.dataset.key=lastKey;recent.innerHTML=last?`<p>Trick ${last.no}: ${esc(seatName(last.winner))} won - ${last.points} pts${last.last?' (includes nest)':''}</p><div class="recent-cards">${last.plays.map(p=>`<div class="${p.seat===last.winner?'trick-winner':''}">${cardHTML(p.card,'xs',g.trump)}<span>${esc(seatName(p.seat))}${p.seat===last.winner?' (winner)':''}</span></div>`).join('')}</div>`:'<p>The last four played cards will stay here.</p>';}
+  if(dealKey!==`${S.room.code}:${g.dealtAt}`){dealKey=`${S.room.code}:${g.dealtAt}`;lastTrickShownNo=g.lastTrick?.no||0;lastTrickUntil=0;shownRecapHand=0;pickedMode='high';pickedMoon=false;prevHandIds=null;if(g.phase==='bidding'&&Date.now()-g.dealtAt<4000)animateDeal($('#tableArea'),backHTML,g.dealer,relPos);}
   renderHandTracker(g); renderTeams($('#drawerTeams'));
   ensureTable();
   if (g.handNo !== lastHandNo) { lastHandNo = g.handNo; lastTrickShownNo = g.lastTrick?.no ?? 0; bidChoice = null; }
@@ -326,14 +352,15 @@ function renderGame() {
   else if (g.phase === 'bidding') banner.innerHTML = `<div class="won soft">${g.bidding.highBid ? `High bid <b>${g.bidding.highBid}</b> · ${esc(seatName(g.bidding.highBidder))}` : 'No bids yet'}${g.nestFaceUp ? ` · nest shows ${SUIT[g.nestFaceUp.color]?.name || 'the Rook'}${g.nestFaceUp.rank ? ' ' + g.nestFaceUp.rank : ''}` : ''}</div>`;
   else banner.innerHTML = '';
   const tb = $('#trumpBadge');
-  if (g.trump) { tb.classList.remove('hidden'); tb.innerHTML = `<span class="tl">Trump</span>${pill(g.trump)}<span class="tb">Bid ${g.bid.amount} · ${esc(seatName(g.bid.seat))}</span>`; } else tb.classList.add('hidden');
+  if (g.trump) { tb.classList.remove('hidden'); tb.innerHTML = `<span class="tl">${g.playMode==='low'?'Low cards / Trump':'Trump'}</span>${pill(g.trump)}<span class="tb">Bid ${g.bid.amount} · ${esc(seatName(g.bid.seat))}</span>`; } else tb.classList.add('hidden');
   if (table) { table.setPlates(plates); table.update({ g, seats: S.room.seats, mySeat: me >= 0 ? me : 0, plays, won }); }
+  if($('#modal').dataset.kind==='score' && $('#modalCard').dataset.scoreKey!==JSON.stringify([g.history,S.room.teams])){const scroll=$('#modalCard').scrollTop;showScorecard();$('#modalCard').scrollTop=scroll;}
   const [st, mine] = statusText(g); const status = $('#status'); status.textContent = st; status.classList.toggle('me', mine); status.classList.toggle('hidden', !st);
   renderHand(g); renderAction(g); renderLog(g); renderHostTools(g);
   if ((g.phase === 'handOver' || g.phase === 'gameOver') && g.recap && shownRecapHand !== g.recap.handNo) {
     const delay = Math.max(0, lastTrickUntil - Date.now()) + 300;
     const hn = g.recap.handNo; shownRecapHand = hn;
-    setTimeout(() => { if (S.game && S.game.recap?.handNo === hn) showRecap(); }, delay);
+    setTimeout(() => { if (S?.game && S.game.recap?.handNo === hn) showRecap(); }, delay);
   } else if (g.phase !== 'handOver' && g.phase !== 'gameOver' && $('#modal').dataset.kind === 'recap') closeModal();
 }
 
@@ -351,25 +378,33 @@ window.addEventListener('resize', () => layoutFan($('#hand')));
 function renderHand(g) {
   const me = S.you.seat; const el = $('#hand');
   if (me < 0) { el.innerHTML = '<div class="watching">You\'re watching. Open the menu to take over a bot\'s seat.</div>'; return; }
+  const signature=JSON.stringify([S.room.code,g.handNo,g.phase,g.turn,g.hand,g.legal,g.queuedCard,g.autoFinish,[...picked],g.trump]);
+  if(el.dataset.signature===signature)return;el.dataset.signature=signature;
   const ids = g.hand.map((c) => c.id);
   if (g.phase === 'nest' && g.turn === me) { if (prevHandIds && prevHandIds.length === 9 && nestIds.size === 0) nestIds = new Set(ids.filter((i) => !prevHandIds.includes(i))); }
   else nestIds = new Set();
   if (g.phase !== 'nest') { picked = new Set(); pickedTrump = null; }
   const newIds = prevHandIds && ids.length > prevHandIds.length + 1 ? new Set(ids) : null; // freshly dealt
   prevHandIds = ids;
-  const legal = new Set(g.legal); const playing = g.phase === 'playing' && g.turn === me; const nesting = g.phase === 'nest' && g.turn === me;
-  el.classList.toggle('active', playing || nesting);
+  const legal = new Set(g.legal); const playing = g.phase === 'playing' && g.turn === me && !g.autoFinish; const nesting = g.phase === 'nest' && g.turn === me;
+  el.classList.toggle('active', playing || nesting || (g.phase==='playing'&&!g.autoFinish));
   el.innerHTML = g.hand.map((c, i) => {
     let cls = '';
     if (playing) cls = legal.has(c.id) ? 'legal' : 'illegal';
     if (nesting) cls = 'legal' + (picked.has(c.id) ? ' picked' : '') + (nestIds.has(c.id) ? ' fromnest' : '');
+    if (g.phase==='playing' && !g.autoFinish && g.turn!==me) cls += ' legal preplayable';
+    if(g.queuedCard===c.id)cls+=' queued-card';
     if (newIds) cls += ' deal';
     return cardHTML(c, cls, g.trump, `--i:${i}`);
   }).join('');
   layoutFan(el);
+  $$('.card', el).forEach(cEl=>{cEl.setAttribute('role','button');cEl.tabIndex=0;cEl.setAttribute('aria-label',cEl.title+(g.queuedCard===cEl.dataset.id?' - queued to play':''));cEl.setAttribute('aria-pressed',String(g.queuedCard===cEl.dataset.id||picked.has(cEl.dataset.id)));cEl.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();cEl.click();}};});
   $$('.card', el).forEach((cEl) => cEl.addEventListener('click', () => {
     const id = cEl.dataset.id;
+    if(g.autoFinish)return;
+    if(g.queuedCard===id){socket.emit('queuePlay',{card:null});return;}
     if (playing && legal.has(id)) { socket.emit('play', { card: id }); cEl.classList.add('played'); el.classList.remove('active'); }
+    else if(g.phase==='playing' && g.turn!==me){socket.emit('queuePlay',{card:g.queuedCard===id?null:id});}
     else if (playing) toast('You must follow the led color');
     else if (nesting) { if (picked.has(id)) picked.delete(id); else if (picked.size < 5) picked.add(id); else toast('Only 5 go back in the nest'); renderHand(g); renderAction(g); }
   }));
@@ -394,17 +429,21 @@ function renderAction(g) {
     a.classList.add('panelish');
     a.innerHTML = `<div class="nestpanel"><div class="np-l"><div class="bp-k">Bury</div><div class="bp-v">${picked.size}<small>/5</small></div><div class="bp-s">${selPts ? `${selPts} pts → last trick` : 'Tap cards to bury'}</div></div>
       <div class="np-t"><div class="bp-k">Name trump</div><div class="trumps">${['R', 'B', 'G', 'Y'].map((c) => `<button class="trumpbtn s-${c} ${pickedTrump === c ? 'sel' : ''}" data-trump="${c}" aria-label="${SUIT[c].name}"><span>${SUIT[c].name}</span><em>${g.hand.filter((x) => x.color === c && !picked.has(x.id)).length}</em></button>`).join('')}</div></div>
+      <div class="nest-options">${g.settings.allowLowCard?`<label>Card order<select id="playMode"><option value="high" ${pickedMode==='high'?'selected':''}>High wins</option><option value="low" ${pickedMode==='low'?'selected':''}>Low wins - Rook still highest</option></select></label>`:''}<label class="moon-choice"><input type="checkbox" id="moonChoice" ${pickedMoon?'checked':''}> Shoot the moon</label><small>Personally win all 9 tricks: +500. Anyone else wins one: -500.</small></div>
       <button class="btn primary" id="discardBtn" ${picked.size === 5 && pickedTrump ? '' : 'disabled'}>Confirm</button></div>`;
     $$('[data-trump]', a).forEach((b) => (b.onclick = () => { pickedTrump = b.dataset.trump; renderAction(g); renderHand(g); }));
-    $('#discardBtn').onclick = () => socket.emit('discard', { cards: [...picked], trump: pickedTrump });
+    const mode=$('#playMode');if(mode)mode.onchange=()=>{pickedMode=mode.value;};
+    $('#moonChoice').onchange=e=>{pickedMoon=e.target.checked;};
+    $('#discardBtn').onclick = () => {if(pickedMoon&&!confirm('Shoot the moon? You personally must win all 9 tricks for +500. Even one trick won by your partner means -500.'))return;socket.emit('discard', { cards: [...picked], trump: pickedTrump, mode:pickedMode, moon:pickedMoon });};
   } else if (g.phase === 'playing' && g.bid?.seat === me && g.myDiscard?.length) {
     a.innerHTML = `<details class="buried"><summary>Your buried nest</summary><div class="cardrow">${g.myDiscard.map((c) => cardHTML(c, 'xs')).join('')}</div></details>`;
   } else if ((g.phase === 'handOver' || g.phase === 'gameOver') && $('#modal').classList.contains('hidden') && shownRecapHand === g.recap?.handNo) {
     a.innerHTML = `<button class="btn primary" id="reopen">${g.phase === 'gameOver' ? 'See final results' : 'See hand recap'}</button>`; $('#reopen').onclick = showRecap;
   } else a.innerHTML = '';
+  if(g.phase==='playing'&&me>=0&&!g.autoFinish){const pre=document.createElement('div');pre.className='preplay-hint';pre.textContent=g.queuedCard?'Card queued - tap it again to cancel. Plays only if legal.':g.turn!==me?'Tap a card to pre-play it on your turn.':'';a.prepend(pre);}
 }
 
-function renderLog(g) { const el = $('#log'); el.innerHTML = g.log.map((l) => `<div>${esc(l.replace(/Seat (\d)/g, (_, n) => seatName(n - 1)))}</div>`).join(''); el.scrollTop = el.scrollHeight; }
+function renderLog(g) { const el = $('#log');const sig=g.log.join('\n');if(el.dataset.signature===sig)return;el.dataset.signature=sig; el.innerHTML = g.log.map((l) => `<div>${esc(l.replace(/Seat (\d)/g, (_, n) => seatName(n - 1)))}</div>`).join(''); el.scrollTop = el.scrollHeight; }
 
 function renderHostTools(g) {
   const el = $('#hostTools'); let h = '';
@@ -435,11 +474,13 @@ function showRecap() {
       <div class="go-avas">${[g.winner, g.winner + 2].map((s) => `<div>${ava(s, TEAM_HEX[g.winner])}<span>${esc(seatName(s))}</span></div>`).join('')}</div></div>`;
     if (win) html += `<div class="confetti" aria-hidden="true">${Array.from({ length: 28 }, (_, i) => `<i style="--d:${(i * 37) % 100}%;--t:${(i % 7) * 0.25}s;--c:${['#4cc2ff', '#ffffff', '#1d4fc4', '#c7d2fe'][i % 4]}"></i>`).join('')}</div>`;
   } else html += `<div class="rc-k">Hand ${r.handNo}</div><h2>Hand recap</h2>`;
+  if(r.moon) html+=`<div class="moon-banner">Shoot the moon: ${r.made?'all nine tricks won personally: +500':'attempt failed: -500'}</div>`;
+  if(r.playMode==='low')html+='<p>Low-card hand - Rook highest</p>';
   html += `<div class="rc-bid">${esc(seatName(r.bid.seat))} bid <b>${r.bid.amount}</b> with ${pill(r.trump)} trump <span class="made ${r.made ? 'yes' : 'no'}">${r.made ? 'Made it' : 'Set'}</span></div>`;
   html += `<div class="recap-grid">${[0, 1].map((t) => `<div class="recap-team t${t}"><div class="rt-n">${esc(teamName(t))}${t === bt ? ' <span class="tag-b">bidders</span>' : ''}</div>
     <div class="rt-s">${r.points[t]} pts · ${r.tricksWon[t]} tricks</div><div class="delta ${r.delta[t] >= 0 ? 'pos' : 'neg'}">${r.delta[t] >= 0 ? '+' : ''}${r.delta[t]}</div><div class="big">${r.scores[t]}</div></div>`).join('')}</div>`;
   html += `<div class="rc-nest">Buried nest (${r.discardPoints} pts) went to ${esc(seatName(r.lastTrickSeat))} for the last trick</div><div class="cardrow">${r.discard.map((c) => cardHTML(c, 'xs')).join('')}</div>`;
-  if (!over && !r.made) html += `<div class="note">Bidders lose their bid when they fall short.</div>`;
+  if (!over && !r.made && !r.moon) html += `<div class="note">Bidders lose their bid when they fall short.</div>`;
   if (over && g.settings.winRule === 'bidderMustMake') html += `<div class="note">Wins only count on a made bid.</div>`;
   const seated = S.you.seat >= 0;
   html += `<div class="modal-btns">`;
@@ -457,10 +498,11 @@ function showRecap() {
 function showScorecard() {
   if (!S?.game) return;
   const g = S.game;
-  const rows = g.history.map((h) => `<tr><td>${h.handNo}</td><td>${esc(seatName(h.bid.seat))}</td><td>${h.bid.amount} ${pill(h.trump)}</td><td>${h.points[0]}–${h.points[1]}</td><td><span class="made ${h.made ? 'yes' : 'no'}">${h.made ? 'made' : 'set'}</span></td><td>${h.delta.map((d) => (d >= 0 ? '+' : '') + d).join(' / ')}</td><td><b>${h.scores[0]}–${h.scores[1]}</b></td></tr>`).join('');
-  openModal(`<h2>Scorecard</h2><div class="sc-teams"><span><span class="tdot t0"></span>${esc(teamName(0))}</span><span><span class="tdot t1"></span>${esc(teamName(1))}</span><span>Play to ${g.settings.targetScore}</span></div>
+  const rows = g.history.map((h) => `<tr><td>${h.handNo}</td><td>${esc(seatName(h.bid.seat))}</td><td>${h.moon?'Moon':h.bid.amount} ${pill(h.trump)}${h.playMode==='low'?' / Low':''}</td><td>${h.points[0]}–${h.points[1]}</td><td><span class="made ${h.made ? 'yes' : 'no'}">${h.made ? 'made' : 'set'}</span></td><td>${h.delta.map((d) => (d >= 0 ? '+' : '') + d).join(' / ')}</td><td><b>${h.scores[0]}–${h.scores[1]}</b></td></tr>`).join('');
+  openModal(`<h2 class="swipe-heading">Scorecard <small>Swipe left to close</small></h2><div class="sc-teams"><span><span class="tdot t0"></span>${esc(teamName(0))}</span><span><span class="tdot t1"></span>${esc(teamName(1))}</span><span>Play to ${g.settings.targetScore}</span></div>
     <div class="sc-wrap"><table class="sc"><thead><tr><th>#</th><th>Bidder</th><th>Bid</th><th>Pts</th><th></th><th>Δ</th><th>Score</th></tr></thead><tbody>${rows || '<tr><td colspan=7 class="muted">No hands yet</td></tr>'}</tbody></table></div>
     <div class="modal-btns"><button class="btn outline" id="closeSc">Close</button></div>`, 'score');
+  $('#modalCard').dataset.scoreKey=JSON.stringify([g.history,S.room.teams]);
   $('#closeSc').onclick = () => { closeModal(); if (g.phase === 'handOver' || g.phase === 'gameOver') showRecap(); };
 }
 window.__rook = { get state() { return S; } };

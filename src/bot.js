@@ -58,7 +58,8 @@ function chooseDiscard(game, seat) {
 function isBoss(card, game) {
   // highest unplayed card of its color (excluding trump considerations)
   if (card.id === E.ROOK_ID) return true;
-  for (let r = card.rank + 1; r <= 14; r++) {
+  for (let r = 5; r <= 14; r++) {
+    if (game.playMode === 'low' ? r >= card.rank : r <= card.rank) continue;
     const id = card.color + r;
     if (!game.played.some((p) => p.id === id)) return false;
   }
@@ -69,26 +70,27 @@ function choosePlay(game, seat) {
   const hand = game.hands[seat];
   const legal = E.legalPlays(hand, game.trick, game.trump, game.settings);
   const trump = game.trump;
+  const strength = c => c.id === E.ROOK_ID ? 100 : game.playMode === 'low' ? 19-c.rank : c.rank;
   const pts = E.cardPoints;
-  const lowFirst = (a, b) => pts(a) - pts(b) || (a.color === trump) - (b.color === trump) || a.rank - b.rank;
+  const lowFirst = (a, b) => pts(a) - pts(b) || (a.color === trump) - (b.color === trump) || strength(a) - strength(b);
   const myTeam = E.teamOf(seat);
   if (!game.trick.length) {
     const nonTrumpBoss = legal.filter((c) => c.color !== trump && c.id !== E.ROOK_ID && isBoss(c, game));
-    if (nonTrumpBoss.length) return nonTrumpBoss.sort((a, b) => b.rank - a.rank)[0].id;
+    if (nonTrumpBoss.length) return nonTrumpBoss.sort((a, b) => strength(b) - strength(a))[0].id;
     const trumps = legal.filter((c) => c.color === trump);
-    if (game.bid && E.teamOf(game.bid.seat) === myTeam && trumps.length >= 3) return trumps.sort((a, b) => b.rank - a.rank)[0].id;
+    if (game.bid && E.teamOf(game.bid.seat) === myTeam && trumps.length >= 3) return trumps.sort((a, b) => strength(b) - strength(a))[0].id;
     return legal.slice().sort(lowFirst)[0].id;
   }
-  const curWinner = E.trickWinner(game.trick, trump);
+  const curWinner = E.trickWinner(game.trick, trump, game.playMode);
   const trickPts = E.sumPoints(game.trick.map((p) => p.card));
   const lastToPlay = game.trick.length === 3;
-  const winners = legal.filter((c) => E.trickWinner([...game.trick, { seat, card: c }], trump) === seat);
+  const winners = legal.filter((c) => E.trickWinner([...game.trick, { seat, card: c }], trump, game.playMode) === seat);
   if (E.teamOf(curWinner) === myTeam) {
     const partnerCard = game.trick.find((p) => p.seat === curWinner).card;
     const safe = lastToPlay || partnerCard.id === E.ROOK_ID || (partnerCard.color === trump && isBoss(partnerCard, game)) || isBoss(partnerCard, game);
     if (safe) {
       // smear points (but not the Rook)
-      const smear = legal.filter((c) => c.id !== E.ROOK_ID).sort((a, b) => pts(b) - pts(a) || a.rank - b.rank);
+      const smear = legal.filter((c) => c.id !== E.ROOK_ID).sort((a, b) => pts(b) - pts(a) || strength(a) - strength(b));
       if (smear.length) return smear[0].id;
     }
     return legal.slice().sort(lowFirst)[0].id;
@@ -98,7 +100,7 @@ function choosePlay(game, seat) {
     const nonRook = winners.filter((c) => c.id !== E.ROOK_ID);
     const pool = nonRook.length ? nonRook : (worth >= 10 || hand.length <= 2 ? winners : []);
     if (pool.length && (worth > 0 || lastToPlay || hand.length <= 3 || pool[0].color !== trump)) {
-      return pool.sort((a, b) => (a.color === trump) - (b.color === trump) || a.rank - b.rank)[0].id;
+      return pool.sort((a, b) => (a.color === trump) - (b.color === trump) || strength(a) - strength(b))[0].id;
     }
   }
   return legal.slice().sort(lowFirst)[0].id;

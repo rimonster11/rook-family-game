@@ -78,8 +78,8 @@ function buildHair(parent,c,mat) {
   if(c.style==='bald') return;
   const covered=['cap','beanie'].includes(c.hat);
   const style=covered ? 'short' : c.style;
-  const curly=style==='curly'||style==='afro';
-  const broad=style==='afro' ? 1.17 : 1;
+  const curly=style==='curly'||style==='afro'||style==='columbus';
+  const broad=style==='afro' ? 1.17 : style==='columbus' ? 1.08 : 1;
   const verts=[], indices=[], rows=24, sides=64;
   for(let j=0;j<=rows;j++) for(let i=0;i<=sides;i++) {
     const a=i/sides*Math.PI*2, front=Math.max(0,Math.sin(a));
@@ -93,6 +93,17 @@ function buildHair(parent,c,mat) {
   for(let j=0;j<rows;j++)for(let i=0;i<sides;i++){const a=j*(sides+1)+i,b=a+sides+1;indices.push(a,b,a+1,b,b+1,a+1);}
   const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(verts,3));geo.setIndex(indices);geo.computeVertexNormals();
   mesh(parent,geo,mat).name='hair-'+style;
+  if(style==='columbus') {
+    // Shoulder-length corkscrew curls around the sides and back of one scalp.
+    for(let i=0;i<18;i++) {
+      const a=Math.PI*.83+i/17*Math.PI*1.34, points=[];
+      for(let j=0;j<=64;j++) {
+        const t=j/64, spin=t*Math.PI*12+i*.7;
+        points.push([Math.cos(a)*.44+Math.cos(spin)*.038, .22-t*(.63+.04*Math.sin(i)), Math.sin(a)*.38+Math.sin(spin)*.038-.025]);
+      }
+      curve(parent,points,.026,mat).name='melissa-ringlet';
+    }
+  }
   if(style==='bun') {oval(parent,mat,[0,.56,-.13],[.20,.21,.18]);ring(parent,.15,.018,material(c.palette.accent),[0,.48,-.13]);}
 }
 

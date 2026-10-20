@@ -8,6 +8,8 @@ const E = require('./engine');
 const Bot = require('./bot');
 const Style = require('../public/js/style-options');
 const Teams = require('./teams');
+const { proveFinish } = require('./auto-finish');
+const { botLine } = require('./banter');
 
 const PORT = Number(process.env.PORT || 3000);
 const app = express();
@@ -29,7 +31,7 @@ function makeCode() {
 const N_CHARS = Style.characterCount;
 const cleanChar = (c) => { const v = Math.floor(Number(c)); return Number.isFinite(v) && v >= 0 && v < N_CHARS ? v : 0; };
 const randChar = (room) => { const used = new Set(room.seats.filter(Boolean).map((s) => s.character)); const free = [...Array(N_CHARS).keys()].filter((i) => !used.has(i)); return free.length ? free[crypto.randomInt(free.length)] : crypto.randomInt(N_CHARS); };
-const makeBot = (room) => ({ type: 'bot', name: pickBotName(room), character: randChar(room) });
+const makeBot = (room, selected) => { const character = selected === 13 ? 13 : randChar(room); return { type: 'bot', name: character === 13 ? 'Melissa' : pickBotName(room), character }; };
 const clean = (s, n = 20) => String(s ?? '').replace(/[<>]/g, '').trim().slice(0, n);
 
 function pickBotName(room) {
@@ -44,9 +46,10 @@ function sanitizeSettings(input, base) {
   num('minBid', 5, 120); num('bidIncrement', 5, 20); num('maxBid', 5, 120); num('targetScore', 100, 2000); num('botDelayMs', 200, 3000);
   s.bidIncrement = Math.max(5, Math.round(s.bidIncrement / 5) * 5);
   s.minBid = Math.round(s.minBid / 5) * 5; s.maxBid = Math.max(s.minBid, Math.round(s.maxBid / 5) * 5);
-  for (const k of ['openerMustBid', 'rookAnytime', 'bidderLeads', 'flipNestCard']) if (input[k] !== undefined) s[k] = !!input[k];
+  for (const k of ['openerMustBid', 'allowLowCard', 'bidderLeads', 'flipNestCard']) if (input[k] !== undefined) s[k] = !!input[k];
   if (['dealerStuck', 'redeal'].includes(input.allPassRule)) s.allPassRule = input.allPassRule;
   if (['bidderMustMake', 'anyReach'].includes(input.winRule)) s.winRule = input.winRule;
+  s.rookAnytime = false;
   return s;
 }
 
@@ -63,6 +66,12 @@ function publicRoom(room) {
 }
 
 function broadcast(room) {
+  const g = room.game;
+  if (g?.phase === 'playing' && !g.autoFinish && !g.trick.length && g.turn === g.bid.seat && g._proofAt !== g.played.length) {
+    g._proofAt = g.played.length;
+    g._autoPlan = proveFinish(g);
+    if (g._autoPlan) { g.autoFinish = true; g.queued.fill(null); g.log.push('Bidder lays down guaranteed winners.'); }
+  }
   const pr = publicRoom(room);
   for (const m of room.members.values()) {
     if (!m.socketId) continue;
@@ -78,22 +87,45 @@ function broadcast(room) {
 function scheduleBots(room) {
   const g = room.game;
   if (!g || room.botTimer) return;
-  let delay = g.settings.botDelayMs;
   if (g.phase === 'handOver') {
-    // auto-advance only if no humans seated
-    if (room.seats.every((s) => s && s.type === 'bot')) delay = 2500; else return;
-    room.botTimer = setTimeout(() => { room.botTimer = null; if (room.game?.phase === 'handOver') { E.nextHand(room.game); broadcast(room); } }, delay);
+    if (!room.seats.every(s => s?.type === 'bot')) return;
+    room.botTimer = setTimeout(() => { room.botTimer = null; if (room.game === g && g.phase === 'handOver') { E.nextHand(g); broadcast(room); } }, 2500);
     return;
   }
-  if (g.turn === null || g.turn === undefined) return;
-  const seat = room.seats[g.turn];
-  if (!seat || seat.type !== 'bot') return;
-  if (g.phase === 'playing' && g.trick.length === 0 && g.lastTrick && g.trickNo === g.lastTrick.no) delay += 900; // let people see completed trick
+  if (!['playing', 'bidding', 'nest'].includes(g.phase)) return;
+  const seat = g.turn, bot = room.seats[seat]?.type === 'bot';
+  const queued = g.phase === 'playing' && g.queued[seat];
+  if (!bot && !queued && !g.autoFinish) return;
+  const stamp = `${g.handNo}:${g.phase}:${g.turn}:${g.played.length}:${g.bidding.history.length}`;
+  let delay = g.autoFinish ? 260 : queued ? 350 : g.settings.botDelayMs;
+  if (g.phase === 'playing' && !g.trick.length && g.lastTrick) delay += g.autoFinish ? 700 : 900;
   room.botTimer = setTimeout(() => {
     room.botTimer = null;
-    try { if (room.game && room.seats[room.game.turn]?.type === 'bot') Bot.act(room.game, room.game.turn); } catch (e) { console.error('bot error', e); }
+    if (room.game !== g) return broadcast(room);
+    const current = `${g.handNo}:${g.phase}:${g.turn}:${g.played.length}:${g.bidding.history.length}`;
+    if (stamp !== current) return broadcast(room);
+    try {
+      if (g.autoFinish && g.phase === 'playing') {
+        const card = g._autoPlan.choose(g);
+        if (!card) throw new Error('Missing proven continuation');
+        E.applyPlay(g, seat, card);
+      } else if (g.phase === 'playing' && g.queued[seat]) {
+        const card = E.takeQueuedPlay(g);
+        if (card) E.applyPlay(g, seat, card);
+      } else if (room.seats[seat]?.type === 'bot') {
+        if (Date.now() - (room.lastBanter || 0) > 12000 && Math.random() < .22) {
+          const text = botLine(room.seats[seat].character, g.phase);
+          if (text) { room.lastBanter = Date.now(); playerChat(room, seat, room.seats[seat].name, text); }
+        }
+        Bot.act(g, seat);
+      }
+    } catch (e) { console.error('automated play error', e); g.autoFinish = false; g._autoPlan = null; }
     broadcast(room);
   }, delay);
+}
+function playerChat(room, seat, from, text) {
+  room.chat.push({ id: crypto.randomUUID(), seat, from, text, t: Date.now() });
+  if (room.chat.length > 100) room.chat.shift();
 }
 
 function sysChat(room, text) { room.chat.push({ from: null, text, t: Date.now() }); if (room.chat.length > 100) room.chat.shift(); }
@@ -148,6 +180,7 @@ io.on('connection', (socket) => {
     const cur = mySeat();
     const target = room.seats[seat];
     if (room.game && cur < 0 && target && target.type === 'bot') { // take over a bot mid-game
+      room.game.queued[seat] = null;
       room.seats[seat] = { type: 'human', playerId: me.playerId, name: me.name, character: me.character ?? 0, appearance: me.appearance || {}, connected: true }; sysChat(room, `${me.name} took over seat ${seat + 1}.`); return;
     }
     if (room.game) return fail('Game in progress - seats are locked');
@@ -166,13 +199,15 @@ io.on('connection', (socket) => {
     try { Teams.respond(room, mySeat(), id, accept === true); } catch (e) { fail(e.message); }
   }));
   socket.on('stand', guard(() => { if (room.game) return fail('Game in progress'); const c = mySeat(); if (c >= 0) room.seats[c] = null; }));
-  socket.on('addBot', guard(({ seat }) => {
+  socket.on('addBot', guard(({ seat, character }) => {
     if (!isHost()) return fail('Only the host can add bots');
     seat = Number(seat);
+    if (!Number.isInteger(seat) || seat < 0 || seat > 3) return fail('Invalid seat');
     const t = room.seats[seat];
     if (t && t.type === 'human' && (!room.game || t.connected)) return fail('Seat taken');
     if (t && t.type === 'human') sysChat(room, `${t.name} was replaced by a bot.`);
-    room.seats[seat] = makeBot(room);
+    room.seats[seat] = makeBot(room, character);
+    if (room.game) room.game.queued[seat] = null;
   }));
   socket.on('fillBots', guard(() => { if (!isHost()) return; for (let i = 0; i < 4; i++) if (!room.seats[i]) room.seats[i] = makeBot(room); }));
   socket.on('clearSeat', guard(({ seat }) => { if (!isHost() || room.game) return; if (room.seats[seat]?.type === 'bot') room.seats[seat] = null; }));
@@ -186,14 +221,15 @@ io.on('connection', (socket) => {
   }));
   socket.on('bid', guard(({ amount }) => E.applyBid(room.game, mySeat(), amount)));
   socket.on('pass', guard(() => E.applyPass(room.game, mySeat())));
-  socket.on('discard', guard(({ cards, trump }) => E.applyDiscard(room.game, mySeat(), cards, trump)));
-  socket.on('play', guard(({ card }) => E.applyPlay(room.game, mySeat(), card)));
+  socket.on('discard', guard(({ cards, trump, mode = 'high', moon = false }) => E.applyDiscard(room.game, mySeat(), cards, trump, mode, moon)));
+  socket.on('queuePlay', guard(({ card }) => E.queuePlay(room.game, mySeat(), card)));
+  socket.on('play', guard(({ card }) => { if (room.game?.autoFinish) return fail('Playing out guaranteed winners'); E.applyPlay(room.game, mySeat(), card); }));
   socket.on('nextHand', guard(() => { if (room.game?.phase === 'handOver' && mySeat() >= 0) E.nextHand(room.game); }));
   socket.on('backToLobby', guard(() => { if (!isHost()) return; if (room.botTimer) { clearTimeout(room.botTimer); room.botTimer = null; } room.game = null; sysChat(room, 'Back to the lobby.'); }));
-  socket.on('chat', guard(({ text }) => { text = clean(text, 200); if (text) { room.chat.push({ from: me.name, text, t: Date.now() }); if (room.chat.length > 100) room.chat.shift(); } }));
+  socket.on('chat', guard(({ text }) => { text = clean(text, 200); if (text && Date.now() - (me.lastChat || 0) >= 800) { me.lastChat = Date.now(); playerChat(room, mySeat(), me.name, text); } }));
   socket.on('leave', guard(() => {
     const c = mySeat();
-    if (c >= 0) { if (room.game) room.seats[c] = makeBot(room); else room.seats[c] = null; }
+    if (c >= 0) { if (room.game) { room.game.queued[c] = null; room.seats[c] = makeBot(room); } else room.seats[c] = null; }
     room.members.delete(me.playerId); sysChat(room, `${me.name} left.`);
     if (me.playerId === room.hostId) { const next = [...room.members.values()][0]; if (next) room.hostId = next.playerId; }
     socket.leave(room.code); const r = room; room = null; me = null; broadcast(r);

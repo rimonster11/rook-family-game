@@ -64,9 +64,9 @@ test('legal: void in led color may play anything', () => {
   const hand = ['B7', 'G14', 'Y5'].map(C);
   assert.deepEqual(ids(E.legalPlays(hand, [P(0, 'R10')], 'G')), ['B7', 'G14', 'Y5']);
 });
-test('legal: Rook may be played any time (rookAnytime=true default)', () => {
+test('legal: Rook must follow suit by default', () => {
   const hand = ['R5', 'B7', 'ROOK'].map(C);
-  assert.deepEqual(ids(E.legalPlays(hand, [P(0, 'R10')], 'G')), ['R5', 'ROOK']);
+  assert.deepEqual(ids(E.legalPlays(hand, [P(0, 'R10')], 'G')), ['R5']);
 });
 test('legal: with rookAnytime=false the Rook must follow like a trump card', () => {
   const hand = ['R5', 'B7', 'ROOK'].map(C);

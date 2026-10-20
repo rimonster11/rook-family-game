@@ -16,6 +16,9 @@ const examples=[
   ['Afro / glasses',0,{style:6,hair:5,skin:5,outfit:2,shirt:5,expression:4,glasses:1}],
 ];
 const result=[];
+if (process.argv.includes('--melissa')) examples.splice(0, examples.length,
+  ['Melissa',13,{}], ['Melissa / glasses',13,{glasses:1}], ['Melissa / hoops',13,{accessory:2}],
+  ['Melissa / smile',13,{expression:1}], ['Melissa / headband',13,{hat:3}], ['Melissa / scarf',13,{accessory:4}]);
 for(const [label,index,appearance] of examples){
   const model=buildCharacter(index,appearance);model.updateMatrixWorld(true);
   const meshes=[];
