@@ -4,7 +4,10 @@ import { charOf, drawCardFace, drawCardBack, drawFeltEmblem, CW, CH, shade } fro
 
 export const TEAM_HEX = ['#4cc2ff', '#e2e8f0'];
 const POS = ['bottom', 'left', 'top', 'right'];
-const SEAT_R = 4.15;
+const SEAT_R = 4.5; // Clear the 3.75 outer rail with both cushion and torso.
+const tableLayouts = new WeakMap();
+// Read-only rendered geometry, used by local visual regression checks.
+export const inspectTableLayout = canvas => tableLayouts.get(canvas)?.();
 const posVec = { bottom: new THREE.Vector3(0, 0, 1), left: new THREE.Vector3(-1, 0, 0), top: new THREE.Vector3(0, 0, -1), right: new THREE.Vector3(1, 0, 0) };
 
 export function webglOK() {
@@ -21,7 +24,11 @@ function mat(hex, o = {}) {
 let backTex = null; const faceTex = new Map(); let maxAniso = 4, texScale = 1.5;
 function canvasTex(draw, w = CW, h = CH) { const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = maxAniso; return t; }
 // Card art is drawn above nominal size so numbers stay sharp at an angle; faces are released when a card leaves the table.
-const cardTex = (draw) => canvasTex((ctx) => { ctx.scale(texScale, texScale); draw(ctx); }, Math.round(CW * texScale), Math.round(CH * texScale));
+const cardTex = (draw) => {
+  const scale=texScale, texture=canvasTex(ctx=>{ctx.scale(scale,scale);draw(ctx);},Math.round(CW*scale),Math.round(CH*scale));
+  document.fonts.ready.then(()=>{const ctx=texture.image.getContext('2d');ctx.setTransform(scale,0,0,scale,0,0);draw(ctx);texture.needsUpdate=true;});
+  return texture;
+};
 const getBack = () => backTex || (backTex = cardTex(drawCardBack));
 function getFace(card) { if (!faceTex.has(card.id)) faceTex.set(card.id, cardTex((ctx) => drawCardFace(ctx, card))); return faceTex.get(card.id); }
 function dropFace(id) { faceTex.get(id)?.dispose(); faceTex.delete(id); }
@@ -89,7 +96,7 @@ export function createTable(container, { quality = 'high', onFps } = {}) {
   renderer.setPixelRatio(Math.min(hi ? 2 : 1.25, window.devicePixelRatio || 1));
   renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
   renderer.shadowMap.enabled = hi; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  const scene = new THREE.Scene(); scene.background = new THREE.Color('#061232'); scene.fog = new THREE.Fog('#061232', 14, 30);
+  const scene = new THREE.Scene(); scene.background = new THREE.Color('#061232'); scene.fog = new THREE.Fog('#061232', 24, 55);
   const cam = new THREE.PerspectiveCamera(45, 1, 0.1, 80);
 
   scene.add(new THREE.HemisphereLight('#c9dbff', '#0a1838', 0.9));
@@ -162,29 +169,24 @@ export function createTable(container, { quality = 'high', onFps } = {}) {
   let W = 1, Hh = 1;
   function resize() {
     W = container.clientWidth || 1; Hh = container.clientHeight || 1; renderer.setSize(W, Hh, false); cam.aspect = W / Hh;
-    const portrait = cam.aspect < 1;
-    for (const st of seats) if (st.dir.x) { const r = portrait ? 3.35 : SEAT_R; st.grp.position.set(st.dir.x * r, 0, 0); st.grp.lookAt(0, 0, 0); st.anchor.set(st.dir.x * r, 2.25, 0); }
-    if (portrait) fitPortrait();
-    else {
-      cam.position.set(0, 5.6, 6.6);
-      const target = new THREE.Vector3(0, 0.9, -0.6); cam.lookAt(target);
-      const dist = cam.position.distanceTo(target);
-      const hf = 2 * Math.atan(6.2 / dist); const vf = 2 * Math.atan(Math.tan(hf / 2) / cam.aspect) * 180 / Math.PI;
-      cam.fov = Math.min(60, Math.max(38, vf)); cam.updateProjectionMatrix();
-    }
+    container.classList.toggle('compact-seats', !!container.closest('.mobile-table') && Hh < 240);
+    // Seat geometry never changes to accommodate a screen: only the camera does.
+    fitScene();
     refitTrick();
   }
-  // Phones: frame the rail, players and their name tags edge to edge, leaving a band at the top for
-  // the tags and at the bottom for the turn pill. Shorter areas get a lower camera so the table stays large.
+  // Fit the actual seating envelope, including chair backs/legs and raised hands.
   const FIT_PTS = [];
-  for (let i = 0; i < 24; i++) { const a = i / 24 * Math.PI * 2; FIT_PTS.push(new THREE.Vector3(Math.cos(a) * (R + 0.46), 0.25, Math.sin(a) * (R + 0.46))); }
-  FIT_PTS.push(new THREE.Vector3(0, 2.25, -SEAT_R), new THREE.Vector3(0, 1.05, -SEAT_R - 0.75));
-  for (const sx of [-1, 1]) FIT_PTS.push(new THREE.Vector3(sx * 3.35, 2.25, 0), new THREE.Vector3(sx * 3.7, 1.7, 0), new THREE.Vector3(sx * 3.7, -0.3, 0.4));
-  const fitV = new THREE.Vector3(), fitTarget = new THREE.Vector3(0, 0.4, -0.3), fitDir = new THREE.Vector3();
-  function fitPortrait() {
+  for (let i=0;i<32;i++) { const a=i/32*Math.PI*2; FIT_PTS.push(new THREE.Vector3(Math.cos(a)*(R+.46),.25,Math.sin(a)*(R+.46))); }
+  for(const st of seats.filter(s=>s.pos!=='bottom')) {
+    st.grp.updateMatrixWorld(true);
+    for(const x of [-.8,.8]) for(const y of [-2.6,2.35]) for(const z of [-.9,1.5]) FIT_PTS.push(st.grp.localToWorld(new THREE.Vector3(x,y,z)));
+  }
+  const fitV = new THREE.Vector3(), fitTarget = new THREE.Vector3(0, 0.0, -0.35), fitDir = new THREE.Vector3();
+  function fitScene() {
     const el = THREE.MathUtils.degToRad(THREE.MathUtils.clamp(36 + (Hh / W - 0.7) * 45, 36, 56));
     fitDir.set(0, Math.sin(el), Math.cos(el)); cam.fov = 34; cam.updateProjectionMatrix();
-    const mt = 2 * 40 / Hh, mb = 2 * 46 / Hh, mx = 2 * 2 / W;
+    const labelMargin = container.closest('.mobile-table') ? 48 : 90;
+    const mt = 2 * Math.min(labelMargin,Hh*.45) / Hh, mb = 2 * 8 / Hh, mx = 2 * 12 / W;
     const measure = (d) => {
       cam.position.copy(fitTarget).addScaledVector(fitDir, d); cam.lookAt(fitTarget); cam.updateMatrixWorld(true);
       let x = 0, y0 = Infinity, y1 = -Infinity;
@@ -216,8 +218,8 @@ export function createTable(container, { quality = 'high', onFps } = {}) {
   // Played cards land large, nearly square to the viewer, and spaced so corner numbers are never covered.
   // The portrait camera sits farther back, so phones get bigger cards than the desktop view.
   function slotFor(seat, order, trickNo) {
-    const d = posVec[POS[rel(seat)]]; const jitter = ((trickNo * 7 + seat * 13) % 10 - 5) * 0.01; const k = cam.aspect < 1 ? 1.32 : 1.08;
-    return { p: new THREE.Vector3(d.x * 0.86 * k, 0.03 + order * 0.008, d.z * 0.7 * k), q: flatQFace(jitter + d.x * 0.05), s: k };
+    const d = posVec[POS[rel(seat)]]; const jitter = ((trickNo * 7 + seat * 13) % 10 - 5) * 0.01; const k = cam.aspect < 1 ? 1.5 : 1.08;
+    return { p: new THREE.Vector3(d.x * 1.03 * k, 0.03 + order * 0.008, d.z * 0.82 * k), q: flatQFace(jitter + d.x * 0.05), s: k };
   }
   const discard = (id, e) => { scene.remove(e.obj); e.obj.traverse((o) => o.material && o.material.dispose()); dropFace(id); cards.delete(id); };
   // Phase panels can reshape the table after a card is thrown; landed cards follow the current camera.
@@ -248,12 +250,12 @@ export function createTable(container, { quality = 'high', onFps } = {}) {
     if (s.pos === 'bottom') { if (s.ch) { s.grp.remove(s.ch); disposeCharacter(s.ch); s.ch = null; } s.charIdx = idx; s.chair.visible = false; return; }
     s.chair.visible = true;
     const lookKey = JSON.stringify([idx, seatInfo?.appearance || {}]);
-    if (s.lookKey !== lookKey) { if (s.ch) { s.grp.remove(s.ch); disposeCharacter(s.ch); } s.ch = idx >= 0 ? buildCharacter(idx, seatInfo.appearance) : null; if (s.ch) { s.ch.position.set(0, 0.15, 0.05); s.grp.add(s.ch); } s.charIdx = idx; s.lookKey = lookKey; }
+    if (s.lookKey !== lookKey) { if (s.ch) { s.grp.remove(s.ch); disposeCharacter(s.ch); } s.ch = idx >= 0 ? buildCharacter(idx, seatInfo.appearance, {seated:true}) : null; if (s.ch) { s.ch.position.set(0, 0.15, 0.05); s.grp.add(s.ch); } s.charIdx = idx; s.lookKey = lookKey; }
     s.trim.material.color.set(TEAM_HEX[team]); s.trim.material.emissive.set(TEAM_HEX[team]);
   }
   function setFan(s, n) {
     if (s.pos === 'bottom' || s.fanCount === n) return; s.fanCount = n; s.fan.clear();
-    for (let i = 0; i < n; i++) { const c = makeCard(null); c.scale.setScalar(0.62); const a = (i - (n - 1) / 2) * 0.12; c.position.set(Math.sin(a) * 0.55, 0.5 + Math.cos(a) * 0.55 - 0.55 + 0.02 * 0, 0.95 + i * 0.004); c.rotation.set(-0.35, Math.PI, a); s.fan.add(c); }
+    for (let i = 0; i < n; i++) { const c = makeCard(null); c.scale.setScalar(0.62); const a = (i - (n - 1) / 2) * 0.12; c.position.set(Math.sin(a) * 0.55, 0.96 + (Math.cos(a)-1) * 0.25, 1.18 + i * 0.004); c.rotation.set(-0.35, Math.PI, a); s.fan.add(c); }
   }
 
   function update({ g, seats: roomSeats, mySeat: ms, plays, won }) {
@@ -296,20 +298,44 @@ export function createTable(container, { quality = 'high', onFps } = {}) {
       if (s.ch) { s.ch.position.y = 0.15 + (reducedMotion() ? 0 : Math.sin(k * 1.6 + s.dir.x * 2 + s.dir.z) * 0.015 + (on ? Math.abs(Math.sin(k * 3)) * 0.04 : 0)); animateCharacter(s.ch, k, on, reducedMotion()); }
       const el = plateEls[s.pos];
       // Name tags ride just above each player's head; phone tags are compact, so they need less headroom.
-      if (el && s.pos !== 'bottom') { const phone = !!container.closest('.mobile-table'); v.copy(s.anchor).project(cam); const x = (v.x * 0.5 + 0.5) * W, y = (-v.y * 0.5 + 0.5) * Hh; const ew = el._w || 120, eh = el._h || 48; tags[s.pos] = { el, ew, eh, cx: Math.min(W - ew / 2 - 6, Math.max(ew / 2 + 6, x)), cy: Math.min(Hh - 60, Math.max(eh + (phone ? 6 : 30), y)) }; }
+      if (el && s.pos !== 'bottom') {
+        const phone = !!container.closest('.mobile-table'), compact=container.classList.contains('compact-seats');
+        v.copy(s.anchor).project(cam);
+        const x=(v.x*.5+.5)*W,y=(-v.y*.5+.5)*Hh,ew=el.offsetWidth,eh=el.offsetHeight;
+        tags[s.pos]={el,ew,eh,cx:compact?W*(['left','top','right'].indexOf(s.pos)+.5)/3:Math.min(W-ew/2-6,Math.max(ew/2+6,x)),
+          cy:compact?eh+6:Math.min(Hh-12,Math.max(eh+(phone?6:30),y))};
+      }
       else tags[s.pos] = null;
     }
     // On short or narrow tables a side tag can meet the top tag; drop it just below instead of overlapping.
     const top = tags.top;
     for (const pos of ['left', 'right']) {
       const t = tags[pos];
-      if (top && t && Math.abs(t.cx - top.cx) < (t.ew + top.ew) / 2 + 4 && t.cy > top.cy - top.eh - 4 && t.cy - t.eh < top.cy + 4) t.cy = Math.min(Hh - 60, top.cy + t.eh + 6);
+      if (!container.classList.contains('compact-seats') && top && t && Math.abs(t.cx - top.cx) < (t.ew + top.ew) / 2 + 4 && t.cy > top.cy - top.eh - 4 && t.cy - t.eh < top.cy + 4) t.cy = Math.min(Hh - 12, top.cy + t.eh + 6);
     }
     for (const t of Object.values(tags)) if (t) t.el.style.transform = `translate(${t.cx.toFixed(1)}px, ${t.cy.toFixed(1)}px) translate(-50%, -100%)`;
     renderer.render(scene, cam);
     frames++; if (now - fpsT > 3000) { onFps && onFps(frames * 1000 / (now - fpsT)); frames = 0; fpsT = now; }
   }
   raf = requestAnimationFrame(frame);
+  tableLayouts.set(canvas, () => {
+    scene.updateMatrixWorld(true);
+    const box = object => new THREE.Box3().setFromObject(object);
+    const near = (bounds, dir) => dir.x ? (dir.x > 0 ? bounds.min.x : -bounds.max.x) : -bounds.max.z;
+    return seats.filter(s => s.pos !== 'bottom' && s.ch).map(s => {
+      const torso=s.ch.getObjectByName('torso'), hands=[];
+      s.ch.traverse(o=>{if(o.name==='hand')hands.push(box(o).min.y);});
+      const bounds=box(s.grp), projected=[];
+      for(const x of [bounds.min.x,bounds.max.x])for(const y of [bounds.min.y,bounds.max.y])for(const z of [bounds.min.z,bounds.max.z]){
+        const p=new THREE.Vector3(x,y,z).project(cam);projected.push([p.x,p.y]);
+      }
+      return {position:s.pos,chairClearance:near(box(s.chair),s.dir)-(R+.45),
+        torsoClearance:torso?near(box(torso),s.dir)-(R+.45):null,
+        handsAboveRail:hands.length?Math.min(...hands)-.25:null,
+        cardsAboveRail:s.fan.children.length?box(s.fan).min.y-.25:null,
+        projected};
+    });
+  });
   return {
     update, resize,
     setPlates(map) { plateEls = map; requestAnimationFrame(() => { for (const el of Object.values(map)) { el._w = el.offsetWidth; el._h = el.offsetHeight; } }); },

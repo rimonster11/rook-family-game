@@ -3,7 +3,6 @@
 const { chromium, webkit } = require('playwright');
 const fs = require('node:fs');
 const path = require('node:path');
-const { execFileSync } = require('node:child_process');
 const E = require('../src/engine');
 const base = process.env.ROOK_LAYOUT_URL || 'http://localhost:3004';
 const output = path.resolve('screenshots/mobile-layout',process.env.ROOK_LAYOUT_GFX||'low');
@@ -47,6 +46,8 @@ for(const [engine,type] of Object.entries({chromium,webkit})){
       await page.evaluate(st=>window.__layoutState(st),state);
       if(phase==='recap')await page.waitForSelector('#modal:not(.hidden)',{timeout:6000});
       await page.waitForFunction(()=>document.querySelector('#game').classList.contains('mobile-table'));
+      await page.waitForFunction(flat=>flat?document.querySelector('#tableArea').classList.contains('mode2d'):(document.querySelector('#tableArea').classList.contains('mode3d')&&document.querySelector('#seat-top').style.transform.includes('translate')),process.env.ROOK_LAYOUT_GFX==='2d');
+      await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
       await page.waitForTimeout(800);
       const checks=await page.evaluate(({phase,top,bottom})=>{
         const rect=s=>{const e=document.querySelector(s);if(!e)return null;const r=e.getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height,right:r.right,bottom:r.bottom};};
@@ -106,32 +107,23 @@ for(const [engine,type] of Object.entries({chromium,webkit})){
     await context.close();
   }
   if(!process.env.ROOK_LAYOUT_SIZE){
-    const desktop=[];
-    for(const baseline of [true,false]){
-      const context=await browser.newContext({viewport:{width:1440,height:900},reducedMotion:'reduce',serviceWorkers:'block'});
-      const page=await context.newPage();
-      await page.route('**/socket.io/socket.io.js',r=>r.fulfill({contentType:'application/javascript',body:adapter}));
-      if(baseline)for(const file of ['index.html','js/app.js','js/three3d.js']){
-        const body=execFileSync('git',['show','HEAD:public/'+file],{encoding:'utf8'});
-        await page.route(file==='index.html'?base+'/?gfx=low':base+'/'+file,r=>r.fulfill({contentType:file.endsWith('.js')?'application/javascript':'text/html',body}));
-      }
-      await page.goto(base+'/?gfx=low');await page.waitForFunction(()=>!!window.__layoutState);
-      const bounds={};
-      for(const [phase,state] of Object.entries(fixtures)){
-        await page.evaluate(st=>window.__layoutState(st),state);await page.waitForTimeout(900);
-        bounds[phase]=await page.evaluate(()=>Object.fromEntries(['.game-top','.hand-tracker','#tableArea','#action','.hand-wrap'].map(s=>{
-          const r=document.querySelector(s).getBoundingClientRect();return [s,[r.x,r.y,r.width,r.height]];
-        })));
-      }
-      desktop.push(bounds);await context.close();
+    // Desktop is polished too: verify containment instead of freezing old overlay coordinates.
+    const context=await browser.newContext({viewport:{width:1440,height:900},reducedMotion:'reduce',serviceWorkers:'block'});
+    const page=await context.newPage();
+    await page.route('**/socket.io/socket.io.js',r=>r.fulfill({contentType:'application/javascript',body:adapter}));
+    await page.goto(base+'/?gfx=low');await page.waitForFunction(()=>!!window.__layoutState);
+    for(const [phase,state] of Object.entries(fixtures)){
+      await page.evaluate(st=>window.__layoutState(st),state);await page.waitForTimeout(900);
+      const fit=await page.evaluate(()=>{
+        const table=document.querySelector('#tableArea').getBoundingClientRect(),action=document.querySelector('#action').getBoundingClientRect(),hand=document.querySelector('.hand-wrap').getBoundingClientRect();
+        return table.height>=100&&table.bottom<=hand.top+1&&(!action.height||(table.bottom<=action.top+1&&action.bottom<=hand.top+1))&&hand.bottom<=innerHeight+1;
+      });
+      if(!fit)throw Error('Desktop containment failed: '+phase);
     }
-    for(const phase of Object.keys(fixtures))for(const selector of Object.keys(desktop[0][phase])){
-      if(desktop[0][phase][selector].some((v,i)=>Math.abs(v-desktop[1][phase][selector][i])>1))throw Error('Desktop changed: '+phase+' '+selector);
-    }
-    console.log(engine,'desktop 1440x900 matches HEAD layout in all four phases PASS');
+    await context.close();console.log(engine,'desktop 1440x900 containment in all four phases PASS');
   }
   }finally{await browser.close();}
 }
-fs.writeFileSync(path.join(output,'results.json'),JSON.stringify(results,null,2));
+fs.writeFileSync(path.join(output,process.env.ROOK_LAYOUT_SIZE?'results-'+process.env.ROOK_LAYOUT_SIZE+'.json':'results.json'),JSON.stringify(results,null,2));
 if(results.some(r=>r.fails.length||r.errors.length))process.exitCode=1;
 })().catch(e=>{console.error(e);process.exitCode=1;});

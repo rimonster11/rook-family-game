@@ -1,3 +1,4 @@
+import { createCardDesign, CARD_WIDTH, CARD_HEIGHT } from './card-design.js';
 // Shared art: rook bird emblem, card faces (HTML + canvas), characters (spec + SVG portraits).
 export const BIRD_PATH = 'M5 35 L22 28.5 C26 22 34 19 42 21.5 C48 23.5 51.5 28.5 53.5 34 C61 38 71 42.5 81 48 L97 56 L94.5 62.5 L77 59.5 C70.5 63.5 62 67 52.5 68 L55 85.5 L61 87.5 L61 90 L49.5 90 L48 69 C46.8 69 45.6 69 44.3 68.6 L42.2 85.5 L48 87.5 L48 90 L36.5 90 L38.8 67 C31.5 64 27 57.5 25.2 49.5 C24.3 45.5 23.5 42 22.2 39.5 Z';
 export const WING_PATH = 'M37 44 C47 39.5 62 41.5 74 49.5 C80 53.5 86 56.5 92 58.5 C80 60 70.5 60.5 62 60 C51.5 59 41.5 54 37 44 Z';
@@ -13,69 +14,22 @@ export const SUIT = {
 };
 export const cardPts = (c) => (c.id === 'ROOK' ? 20 : c.rank === 5 ? 5 : c.rank === 10 || c.rank === 14 ? 10 : 0);
 
+const cardDesign = createCardDesign({birdPath:BIRD_PATH,wingPath:WING_PATH,eye:EYE,suits:SUIT,points:cardPts});
 export function cardHTML(c, cls = '', trump = null, style = '') {
   if (!c) return '';
-  if (c.id === 'ROOK') return `<div class="card rookcard ${cls}" data-id="ROOK" style="${style}" title="The Rook — 20 pts, highest trump"><div class="rk-top">ROOK</div><div class="rk-bird">${birdSVG('#fff', '#0b2a7a', 'rgba(11,42,122,.25)')}</div><div class="rk-pts">20</div></div>`;
-  const p = cardPts(c);
-  const tr = trump && c.color === trump ? ' trump' : '';
-  return `<div class="card face s-${c.color}${tr} ${cls}" data-id="${c.id}" title="${SUIT[c.color].name} ${c.rank}${p ? ` · ${p} pts` : ''}" style="--sc:${SUIT[c.color].hex};${style}">
-<span class="idx tl">${c.rank}</span><span class="idx br">${c.rank}</span><div class="frame"><span class="num${c.rank >= 10 ? ' n2' : ''}">${c.rank}</span><span class="mini">${birdSVG('currentColor', '#fff', 'transparent')}</span></div>${p ? `<span class="ptb">${p}</span>` : ''}</div>`;
+  const rook=c.id==='ROOK', p=cardPts(c);
+  const title=rook?'The Rook - 20 pts, highest trump':`${SUIT[c.color].name} ${c.rank}${p?` - ${p} pts`:''}`;
+  return `<div class="card ${rook?'rookcard':`face s-${c.color}`}${trump&&c.color===trump?' trump':''} ${cls}" data-id="${c.id}" style="${style}" title="${title}">${cardDesign.svg(c)}</div>`;
 }
-export const backHTML = (cls = '') => `<div class="card back ${cls}"><div class="bk-in">${birdSVG('#fff', '#123a9c', 'rgba(18,58,156,.2)')}</div></div>`;
-
-// ---------- canvas drawing (for 3D textures) ----------
-function rr(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+export const backHTML = (cls = '') => `<div class="card back ${cls}">${cardDesign.svg(null)}</div>`;
+export const CW = CARD_WIDTH, CH = CARD_HEIGHT;
+export const drawCardFace = (ctx,c) => cardDesign.draw(ctx,c);
+export const drawCardBack = ctx => cardDesign.draw(ctx,null);
 function drawBird(ctx, x, y, size, fill, eye, wing) {
   ctx.save(); ctx.translate(x, y); ctx.scale(size / 100, size / 100);
   ctx.fillStyle = fill; ctx.fill(new Path2D(BIRD_PATH));
   if (wing) { ctx.fillStyle = wing; ctx.fill(new Path2D(WING_PATH)); }
   ctx.fillStyle = eye; ctx.beginPath(); ctx.arc(EYE.cx, EYE.cy, EYE.r, 0, 7); ctx.fill(); ctx.restore();
-}
-export const CW = 256, CH = 360;
-export function drawCardFace(ctx, c) {
-  ctx.clearRect(0, 0, CW, CH);
-  const font = '"Rook Display","Trebuchet MS",sans-serif';
-  if (c.id === 'ROOK') {
-    rr(ctx, 4, 4, CW - 8, CH - 8, 22); const g = ctx.createLinearGradient(0, 0, 0, CH); g.addColorStop(0, '#1f4fd1'); g.addColorStop(1, '#0a2470'); ctx.fillStyle = g; ctx.fill();
-    ctx.lineWidth = 6; ctx.strokeStyle = '#fff'; rr(ctx, 16, 16, CW - 32, CH - 32, 14); ctx.stroke();
-    drawBird(ctx, 28, 80, 200, '#fff', '#0b2a7a', 'rgba(11,42,122,.25)');
-    ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.font = `900 46px ${font}`; ctx.fillText('ROOK', CW / 2, 66);
-    ctx.font = `800 30px ${font}`; ctx.fillText('20', CW / 2, CH - 34);
-    return;
-  }
-  // Same proportions as the HTML card: corner indices sit clear of the frame; ink is measured so numbers center exactly.
-  const s = SUIT[c.color], u = CW / 100, two = c.rank >= 10, hue = c.color === 'Y' ? '#d4a600' : s.hex;
-  rr(ctx, 4, 4, CW - 8, CH - 8, 22); ctx.fillStyle = '#fbfcff'; ctx.fill();
-  ctx.lineWidth = 4; ctx.strokeStyle = '#aebbd3'; ctx.stroke();
-  const fx = 14 * u, fy = 24 * u, fw = CW - 2 * fx, fh = CH - 2 * fy;
-  ctx.lineWidth = 2.6 * u; ctx.strokeStyle = hue; rr(ctx, fx, fy, fw, fh, 7 * u); ctx.stroke();
-  ctx.fillStyle = hue; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-  // Yellow on white needs a faint dark edge to stay legible under the table lights.
-  const edge = c.color === 'Y' ? 'rgba(110,84,0,.6)' : null;
-  const ink = (text, px, cx, cy, outline = edge) => {
-    ctx.font = `${px}px ${font}`; const m = ctx.measureText(text);
-    const x = cx + (m.actualBoundingBoxLeft - m.actualBoundingBoxRight) / 2, y = cy + (m.actualBoundingBoxAscent - m.actualBoundingBoxDescent) / 2;
-    if (outline) { ctx.lineWidth = px * 0.06; ctx.lineJoin = 'round'; ctx.strokeStyle = outline; ctx.strokeText(text, x, y); }
-    ctx.fillText(text, x, y);
-  };
-  const numPx = (two ? 40 : 46) * u, birdS = 17 * u, cy = CH / 2 - birdS * 0.55;
-  ink(String(c.rank), numPx, CW / 2, cy);
-  drawBird(ctx, CW / 2 - birdS / 2, cy + numPx * 0.36 + 2 * u - birdS * 0.15, birdS, hue, '#fff');
-  const idxPx = 17 * u, ix = 8 * u + idxPx * (two ? 0.48 : 0.28), iy = 5 * u + idxPx * 0.5;
-  ink(String(c.rank), idxPx, ix, iy);
-  ctx.save(); ctx.translate(CW, CH); ctx.rotate(Math.PI); ink(String(c.rank), idxPx, ix, iy); ctx.restore();
-  const p = cardPts(c);
-  if (p) { const r = 8.5 * u, bx = CW - 6 * u - r, by = 5 * u + r; ctx.fillStyle = '#0d2a6e'; ctx.beginPath(); ctx.arc(bx, by, r, 0, 7); ctx.fill(); ctx.fillStyle = '#fff'; ink(String(p), 9.5 * u, bx, by, null); }
-}
-export function drawCardBack(ctx) {
-  ctx.clearRect(0, 0, CW, CH);
-  rr(ctx, 4, 4, CW - 8, CH - 8, 22); ctx.fillStyle = '#fff'; ctx.fill();
-  rr(ctx, 14, 14, CW - 28, CH - 28, 14); const g = ctx.createRadialGradient(CW / 2, CH / 2, 20, CW / 2, CH / 2, 220); g.addColorStop(0, '#2457d6'); g.addColorStop(1, '#0b2470'); ctx.fillStyle = g; ctx.fill();
-  ctx.strokeStyle = 'rgba(255,255,255,.12)'; ctx.lineWidth = 2;
-  for (let i = -CH; i < CW + CH; i += 18) { ctx.beginPath(); ctx.moveTo(i, 14); ctx.lineTo(i + CH, CH + 14); ctx.stroke(); }
-  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(CW / 2, CH / 2, 82, 0, 7); ctx.fill();
-  ctx.strokeStyle = '#0b2470'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(CW / 2, CH / 2, 74, 0, 7); ctx.stroke();
-  drawBird(ctx, CW / 2 - 60, CH / 2 - 62, 120, '#0b2470', '#fff', 'rgba(255,255,255,.2)');
 }
 export function drawFeltEmblem(ctx, S) {
   // A darker trick zone under the played cards keeps white faces crisp against the felt.

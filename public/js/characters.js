@@ -112,7 +112,7 @@ export function disposeCharacter(character) {
   character?.traverse((o) => { if (o.isMesh) o.geometry.dispose(); });
 }
 
-export function buildCharacter(idx, appearance = {}) {
+export function buildCharacter(idx, appearance = {}, { seated = false } = {}) {
   if (charOf(idx).model) return createModelCharacter(charOf(idx));
   const c = charOf(idx, appearance), G = new THREE.Group(); G.name = 'char';
   const skin = material(c.skin, 'skin'), shirt = material(c.palette.primary), hair = material(c.hair, 'hair');
@@ -120,7 +120,7 @@ export function buildCharacter(idx, appearance = {}) {
   const eyeWhite = material('#fffaf0', 'eyes'), pupil = material('#17233c', 'eyes');
   const iris = material(c.eyeColor, 'eyes');
   const torso = new THREE.LatheGeometry([[0,-.40],[.34,-.40],[.40,-.29],[.43,.06],[.48,.34],[.41,.46],[.19,.56],[0,.56]].map(([x,y]) => new THREE.Vector2(x,y)), 48);
-  mesh(G, torso, shirt, [0,0,0], [1,1,.66]);
+  mesh(G, torso, shirt, [0,0,0], [1,1,.66]).name = 'torso';
   oval(G, skin, [0, .66, 0], [.12, .18, .12]);
   ring(G, .17, .025, trim, [0, .56, 0]);
   curve(G, [[-.31, -.30, .18], [0, -.33, .255], [.31, -.30, .18]], .012, trim);
@@ -152,11 +152,13 @@ export function buildCharacter(idx, appearance = {}) {
     curve(G,[[-.30,.20,.252],[0,.20,.307],[.30,.20,.252]],.007,trim);
   }
   for (const s of [-1, 1]) {
-    curve(G, [[s * .28, .35, 0], [s * .44, .34, .06], [s * .54, .16, .17], [s * .49, -.06, .48], [s * .35, -.12, .72]], .123, c.outfit === 'jacket' ? trim : shirt);
-    oval(G, trim, [s * .36, -.11, .69], [.144, .12, .105]);
-    oval(G, skin, [s * .34, -.12, .80], [.145, .093, .17]);
-    oval(G, skin, [s * .23, -.085, .79], [.06, .065, .10], 24);
-    for (let f = 0; f < 2; f++) curve(G, [[s * (.30 + f * .055), -.045, .83], [s * (.30 + f * .055), -.04, .88]], .004, material(shade(c.skin, -.15), 'skin'));
+    // Table pose reaches over the rail; the preview keeps its relaxed pose.
+    const lift = seated ? .48 : 0, reach = seated ? .35 : 0;
+    curve(G, [[s * .28, .35, 0], [s * .44, .34, .06], [s * .54, .16+lift*.65, .17+reach*.3], [s * .49, -.06+lift, .48+reach*.8], [s * .35, -.12+lift, .72+reach]], .123, c.outfit === 'jacket' ? trim : shirt);
+    oval(G, trim, [s * .36, -.11+lift, .69+reach], [.144, .12, .105]);
+    oval(G, skin, [s * .34, -.12+lift, .80+reach], [.145, .093, .17]).name = 'hand';
+    oval(G, skin, [s * .23, -.085+lift, .79+reach], [.06, .065, .10], 24);
+    for (let f = 0; f < 2; f++) curve(G, [[s * (.30 + f * .055), -.045+lift, .83+reach], [s * (.30 + f * .055), -.04+lift, .88+reach]], .004, material(shade(c.skin, -.15), 'skin'));
   }
 
   const H = new THREE.Group(); H.position.y = 1.13; G.add(H); G.userData.head = H;

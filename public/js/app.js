@@ -75,6 +75,7 @@ $('#startBtn').onclick = () => socket.emit('start');
 const closeDrawer = () => { drawerOpen = false; $('#drawer').classList.remove('open'); };
 const openDrawer = () => { drawerOpen=true; $('#drawer').classList.add('open'); renderChat(); };
 $('#chatToggle').onclick = () => drawerOpen ? closeDrawer() : openDrawer();
+$('#recentTrick').addEventListener('toggle', () => { $('#recentTrickCards').hidden = !$('#recentTrick').open; });
 $('#chatGrip').onclick = openDrawer; $('#scoreGrip').onclick = showScorecard;
 installSwipes({active:()=>!!S?.game,chatOpen:()=>drawerOpen,scoreOpen:()=>$('#modal').dataset.kind==='score',openChat:openDrawer,closeChat:closeDrawer,openScore:showScorecard,closeScore:closeModal});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeDrawer();if(['score','char'].includes($('#modal').dataset.kind))closeModal();}});
@@ -325,7 +326,7 @@ function renderGame() {
   const last=g.lastTrick;
   const recent=$('#recentTrickCards');
   const lastKey=`${S.room.code}:${g.handNo}:${last?.no||0}`;
-  if(recent.dataset.key!==lastKey){recent.dataset.key=lastKey;recent.innerHTML=last?`<p>Trick ${last.no}: ${esc(seatName(last.winner))} won - ${last.points} pts${last.last?' (includes nest)':''}</p><div class="recent-cards">${last.plays.map(p=>`<div class="${p.seat===last.winner?'trick-winner':''}">${cardHTML(p.card,'xs',g.trump)}<span>${esc(seatName(p.seat))}${p.seat===last.winner?' (winner)':''}</span></div>`).join('')}</div>`:'<p>The last four played cards will stay here.</p>';}
+  if(recent.dataset.key!==lastKey){recent.dataset.key=lastKey;recent.innerHTML=last?`<p>Trick ${last.no}: ${esc(seatName(last.winner))} won - ${last.points} pts${last.last?' (includes nest)':''}</p><div class="recent-cards">${last.plays.map(p=>`<div class="${p.seat===last.winner?'trick-winner':''}">${cardHTML(p.card,'xs',g.trump)}<span>${esc(seatName(p.seat))}${p.seat===last.winner?'<small class="winner-label">Winner</small>':''}</span></div>`).join('')}</div>`:'<p>The last four played cards will stay here.</p>';}
   if(dealKey!==`${S.room.code}:${g.dealtAt}`){dealKey=`${S.room.code}:${g.dealtAt}`;lastTrickShownNo=g.lastTrick?.no||0;lastTrickUntil=0;shownRecapHand=0;pickedMode='high';pickedMoon=false;prevHandIds=null;if(g.phase==='bidding'&&Date.now()-g.dealtAt<4000)animateDeal($('#tableArea'),backHTML,g.dealer,relPos);}
   renderHandTracker(g); renderTeams($('#drawerTeams'));
   ensureTable();
@@ -376,7 +377,7 @@ function layoutFan(el) {
   if (mobile && n > 9) return;
   const W = el.clientWidth || 360; const cw = cards[0].offsetWidth || 70;
   const step = Math.min(cw * 0.78, (W - cw - 28) / Math.max(1, n - 1));
-  const spread = mobile ? .6 : Math.min(3.2, 26 / n);
+  const spread = mobile || n > 9 ? .6 : Math.min(3.2, 26 / n);
   cards.forEach((c, i) => {
     const o = i - (n - 1) / 2; c.style.setProperty('--x', `${o * step}px`); c.style.setProperty('--r', `${o * spread}deg`); c.style.setProperty('--y', `${mobile ? 0 : Math.min(18, o * o * 0.45)}px`); c.style.zIndex = i + 1;
   });

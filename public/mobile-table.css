@@ -42,7 +42,7 @@
   .mobile-table .grip-ico { display: block; width: 22px; height: 22px; }
   .mobile-table .grip-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   .mobile-table #chatGripBadge { top: 5px; right: 5px; background: #ffd27a; box-shadow: 0 0 0 2px #244b60; }
-  .mobile-table #recentTrickCards { position: fixed; z-index: 20; top: calc(var(--table-viewport-top, 0px) + var(--table-safe-top) + 62px); left: calc(var(--table-safe-left) + 8px); right: calc(var(--table-safe-right) + 8px); border: 1px solid #85a5ae; border-radius: 14px; padding-top: 10px; background: #1c3e55; box-shadow: 0 10px 28px #071e3499; }
+
   .mobile-table .hand-tracker { flex: 0 0 auto; display: grid; grid-template-columns: 50px minmax(0,1fr) minmax(0,1fr); gap: 4px 12px; align-items: center; padding: 0 12px 8px; background: #17364d; border-bottom: 1px solid #6d8fa04d; box-shadow: 0 6px 14px #06182a55; position: relative; z-index: 2; }
   .mobile-table .hand-label { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; grid-row: 1; }
   .mobile-table .hand-label .eyebrow { font-size: 11px; padding: 1px 5px; border-radius: 6px; }
@@ -61,12 +61,9 @@
   .mobile-table .nest-note, .mobile-table .mobile-readout, .mobile-table #trumpBadge { display: none!important; }
   .mobile-table .game-wrap { flex: 1 1 0; min-height: 0; overflow: hidden; }
   .mobile-table .table-area { flex: 1 1 0; min-height: 100px; }
-  /* Notices dock as pills along the bottom of the table; the bid panel already covers bidding and burying. */
-  .mobile-table .table-area .banner, .mobile-table .table-area .status { top: auto!important; left: 50%!important; right: auto!important; transform: translateX(-50%)!important; max-width: calc(100% - 24px); margin: 0; z-index: 6; }
-  .mobile-table .table-area .status { bottom: 10px!important; font-size: 13px!important; line-height: 1.2; padding: 6px 15px; border-radius: 99px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; box-shadow: 0 4px 14px #0007; }
-  .mobile-table .table-area .banner { bottom: 48px!important; }
-  .mobile-table .table-area .banner .won { font-size: 12.5px; line-height: 1.2; padding: 5px 13px; border-radius: 99px; white-space: nowrap; box-shadow: 0 4px 14px #0007; }
-  .mobile-table[data-phase=bidding] .table-area .banner, .mobile-table[data-phase=nest] .table-area .banner, .mobile-table[data-phase=bidding] .status.me, .mobile-table[data-phase=nest] .status.me { display: none; }
+  /* Notices have their own row so they cannot obscure the table or name tags. */
+  .mobile-table[data-phase=bidding] .table-notices .banner, .mobile-table[data-phase=nest] .table-notices .banner,
+  .mobile-table[data-phase=bidding] .table-notices .status.me, .mobile-table[data-phase=nest] .table-notices .status.me { display:none; }
   /* 2D fallback keeps fixed label slots; the 3D table projects compact tags above each player. */
   .mobile-table .table-area.mode2d .seat { transform: none!important; gap: 2px; max-width: calc((100% - 24px) / 3); }
   .mobile-table .table-area.mode2d .pos-top { top: 4px; left: 50%; right: auto; bottom: auto; transform: translateX(-50%)!important; }
@@ -75,15 +72,19 @@
   .mobile-table .table-area.mode2d .pos-bottom { left: 50%; bottom: 52px; top: auto; transform: translateX(-50%)!important; }
   .mobile-table .table-area.mode3d .seat.pos-bottom { display: none; }
   .mobile-table .table-area.mode3d .seat { z-index: 5; }
-  .mobile-table .plate { padding: 3px 10px 3px 3px; gap: 6px; border-radius: 99px; max-width: 100%; background: #12304599; border: 1px solid #8fb0bfaa; box-shadow: 0 3px 10px #04121f66; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+  .mobile-table .plate { max-width:calc((100vw - 32px) / 2); padding: 3px 10px 3px 3px; gap: 6px; border-radius: 99px; background: #12304599; border: 1px solid #8fb0bfaa; box-shadow: 0 3px 10px #04121f66; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
   .mobile-table .plate.turn { background: #2f566bdd; border-color: #ffe0a0; box-shadow: 0 0 0 2px #edc576, 0 3px 12px #04121f88; }
   .mobile-table .pava { width: 26px; height: 26px; }
-  .mobile-table .pinfo { display: flex; align-items: baseline; gap: 6px; }
+  .mobile-table .pinfo { display: flex; flex-direction:column; align-items:flex-start; gap:1px; min-width:0; }
   .mobile-table .nm { font-size: 13px; max-width: 76px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; text-shadow: none; }
   .mobile-table .meta { font-size: 10.5px; margin-top: 0; gap: 3px; color: #c5d9e3; }
   .mobile-table .chip { font-size: 9px; height: 14px; min-width: 14px; padding: 0 3px; }
   .mobile-table .plate .botbadge { display: none; }
-  .mobile-table .bubble { top: -10px; right: -10px; bottom: auto; left: auto; transform: none; min-width: 26px; padding: 2px 7px; border-radius: 99px; font-size: 12px; line-height: 1.2; text-align: center; box-shadow: 0 2px 6px #0006; z-index: 2; }
+  .mobile-table .compact-seats .seat { max-width:calc((100% - 24px) / 3); }
+  .mobile-table .compact-seats .plate { gap:3px;padding-right:5px; }
+  .mobile-table .compact-seats .nm { max-width:55px; }
+  .mobile-table .compact-seats .bubble { font-size:10px;min-width:0;padding:2px 3px; }
+  .mobile-table .bubble { position:static; order:3; flex:none; transform:none; min-width: 26px; padding: 2px 7px; border-radius: 99px; font-size: 12px; line-height: 1.2; text-align: center; box-shadow: 0 2px 6px #0006; z-index: 2; }
   .mobile-table .bubble::after { display: none; }
   .mobile-table .backs { display: none; }
   .mobile-table .player-bubble { max-width: 150px; font-size: 11px; bottom: auto; top: calc(100% + 6px); z-index: 9; }
@@ -122,16 +123,10 @@
   .mobile-table .buried { padding: 0; }
   .mobile-table .buried summary { min-height: 30px; font-size: 12px!important; }
   .mobile-table .hand-wrap { --cw: 74px; --ch: 104px; height: 124px; padding: 0; flex: 0 0 124px; }
-  /* Fanned cards show only their left strip, so covered cards slide their big number into it. */
-  .mobile-table .hand:not(.nest-grid) .card:not(:last-child) .frame { align-items: flex-start; padding-left: calc(var(--u) * 3); }
-  .mobile-table .hand:not(.nest-grid) .card:not(:last-child) .num.n2 { font-size: calc(var(--u) * 31); }
-  .mobile-table .hand:not(.nest-grid) .card:not(:last-child) .mini { margin-left: calc(var(--u) * 2); }
-  .mobile-table .hand:not(.nest-grid) .rookcard:not(:last-child) { align-items: flex-start; padding-left: calc(var(--cw) * .09); }
-  .mobile-table .hand:not(.nest-grid) .rookcard:not(:last-child) .rk-bird { width: calc(var(--u) * 44); }
   .mobile-table .hand .card { bottom: 8px; }
   .mobile-table .hand-wrap:has(.nest-grid) { height: 152px; flex-basis: 152px; }
-  .mobile-table .hand.nest-grid { display: grid; grid-template-columns: repeat(7,minmax(0,1fr)); gap: 4px 3px; padding: 4px 6px; align-content: center; }
-  .mobile-table .hand.nest-grid .card { --cw: 100%; --ch: 70px; position: relative; width: 100%; height: 70px; left: auto; bottom: auto; margin: 0; transform: none!important; animation: none; border-radius: 7px; }
+  .mobile-table .hand.nest-grid { --nest-card-height:70px; display: grid; grid-template-columns: repeat(7,minmax(0,1fr)); gap: 4px 3px; padding: 4px 6px; align-content: center; justify-items: center; }
+  .mobile-table .hand.nest-grid .card { --cw:min(100%,calc(var(--nest-card-height) * 256 / 360)); position: relative; width:var(--cw); height:auto; aspect-ratio:256 / 360; left: auto; bottom: auto; margin: 0; transform: none!important; animation: none; border-radius: 6px; }
   .mobile-table .hand.nest-grid .card.picked { box-shadow: inset 0 0 0 3px #f4cb7c, 0 0 0 2px #f4cb7c; }
   .mobile-table .hand.nest-grid .card.picked::before { content: '✓'; position: absolute; z-index: 3; right: 2px; bottom: 3px; background: #ffe4aa; color: #203b50; border-radius: 50%; padding: 0 3px; font-size: 13px; }
   .mobile-table .hand.nest-grid .card.fromnest::after { font-size: 7px; }
@@ -152,7 +147,7 @@
 @media (max-width:640px) and (max-height:620px) {
   .mobile-table .nest-options small { display: none; }
   .mobile-table .hand-wrap:has(.nest-grid) { height: 132px; flex-basis: 132px; }
-  .mobile-table .hand.nest-grid .card { --ch: 60px; height: 60px; }
+  .mobile-table .hand.nest-grid { --nest-card-height:60px; }
 }
 /* In a short landscape viewport, keep the table beside the controls and hand. */
 @media (min-width:641px) and (max-height:500px) and (pointer:coarse) {
@@ -161,16 +156,25 @@
   .mobile-table .hand-tracker { grid-column: 2; grid-row: 1; }
   /* Icon buttons sit at the right end of the score row, which fills the left half here. */
   .mobile-table .mobile-table-tools { top: 6px; right: auto; left: calc(50% - 106px); }
-  .mobile-table .game-wrap { grid-column: 1 / -1; grid-row: 3; display: grid; grid-template-columns: minmax(0,.9fr) minmax(0,1.1fr); grid-template-rows: auto minmax(0,1fr); }
+  .mobile-table .recent-trick-panel { grid-column:1 / -1; grid-row:2; }
+  .mobile-table .game-wrap { grid-column: 1 / -1; grid-row: 3; display: grid; grid-template-columns: minmax(0,.9fr) minmax(0,1.1fr); grid-template-rows: auto minmax(0,1fr) auto; }
   .mobile-table .mobile-readout { grid-column: 1 / -1; grid-row: 1; }
   .mobile-table .table-area { grid-column: 1; grid-row: 2; }
+  .mobile-table .table-notices { grid-column:1; grid-row:3; }
   .mobile-table .action { grid-column: 2; grid-row: 2; align-self: start; }
-  .mobile-table .hand-wrap { grid-column: 2; grid-row: 2; align-self: end; }
+  .mobile-table .hand-wrap { grid-column: 2; grid-row: 2 / 4; align-self: end; }
   .mobile-table .nest-options small { display: none; }
   .mobile-table .nestpanel { padding: 3px; gap: 0 4px; }
   .mobile-table .nest-options { padding: 0 6px; }
   .mobile-table .np-t .bp-k { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
   .mobile-table .trumps { margin-top: 0; }
   .mobile-table .hand-wrap:has(.nest-grid) { height: 124px; flex-basis: 124px; }
-  .mobile-table .hand.nest-grid .card { --ch: 56px; height: 56px; }
+  .mobile-table .hand.nest-grid { --nest-card-height:56px; }
+  /* The expanded history uses the left column; controls retain the full right column. */
+  #game.mobile-table:has(#recentTrick[open]) { grid-template-rows:auto auto minmax(100px,1fr) auto; }
+  .mobile-table:has(#recentTrick[open]) .game-wrap { display:contents; }
+  .mobile-table:has(#recentTrick[open]) .recent-trick-panel { grid-column:1; grid-row:2; width:calc(100% - 16px); }
+  .mobile-table:has(#recentTrick[open]) .table-area { grid-column:1; grid-row:3; }
+  .mobile-table:has(#recentTrick[open]) .table-notices { grid-column:1; grid-row:4; }
+  .mobile-table:has(#recentTrick[open]) .hand-wrap { grid-column:2; grid-row:2 / 5; }
 }
