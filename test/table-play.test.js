@@ -27,7 +27,7 @@ test('low ranks win only within led/trump color; Rook remains highest and points
   assert.equal(E.sumPoints(['R5','B10','G14','ROOK'].map(C)),45);
 });
 test('low-card and moon declarations are validated before changing the nest',()=>{
-  const g=E.newGame();E.applyBid(g,g.turn,120);
+  const g=E.newGame({allowLowCard:false});E.applyBid(g,g.turn,120);
   const seat=g.turn,ids=g.hands[seat].slice(0,5).map(c=>c.id),snapshot=JSON.stringify(g);
   assert.throws(()=>E.applyDiscard(g,seat,ids,'R','low',true),/not enabled/);
   assert.equal(JSON.stringify(g),snapshot);

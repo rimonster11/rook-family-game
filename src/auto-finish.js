@@ -5,6 +5,7 @@ const keyOf = (hands, trick, turn) => `${turn}|${hands.map(h => h.map(c => c.id)
 // Existential bidder choices, universal choices for ALL other seats, including partner.
 // A resource limit means "not proven", never permission to claim the hand.
 function proveFinish(game, { maxNodes = 25000, maxMs = 35 } = {}) {
+  if (!E.profile(game.settings).autoFinish) return null;
   if (game.phase !== 'playing' || game.trick.length || game.turn !== game.bid?.seat) return null;
   const bidder = game.bid.seat, trump = game.trump, mode = game.playMode;
   if (!game.hands[bidder].length) return null;

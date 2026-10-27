@@ -18,6 +18,14 @@ test('live table: low-card settings, private pre-play execution, chat identity a
   async function connect(){const s=io(url,{transports:['websocket'],forceNew:true});clients.push(s);await event(s,'connect');return s;}
   const host=await connect();let pending=event(host,'state');
   host.emit('createRoom',{name:'Host',playerId:'h',character:13});let state=await pending;const code=state.room.code;
+  assert.equal(state.room.seats.length,4);
+  assert.equal(state.room.settings.allowLowCard,true);
+  assert.equal(state.room.settings.botDelayMs,2000);
+  pending=event(host,'state',s=>!s.room.settings.allowLowCard&&s.room.settings.botDelayMs===900);
+  host.emit('settings',{allowLowCard:false,botDelayMs:900});await pending;
+  pending=event(host,'state');host.emit('hello',{code,playerId:'h'});state=await pending;
+  assert.equal(state.room.settings.allowLowCard,false,'Reattaching preserves the host off switch');
+  assert.equal(state.room.settings.botDelayMs,900,'Reattaching preserves configured pacing');
   pending=event(host,'state',s=>s.room.seats[1]?.character===13);host.emit('addBot',{seat:1,character:13});state=await pending;
   assert.equal(state.room.seats[1].name,'Melissa');
   pending=event(host,'state',s=>s.room.seats[1]===null);host.emit('clearSeat',{seat:1});await pending;
@@ -27,11 +35,14 @@ test('live table: low-card settings, private pre-play execution, chat identity a
   pending=event(spectator,'errorMsg');spectator.emit('settings',{allowLowCard:true});assert.match(await pending,/host/);
   pending=event(host,'state',s=>s.room.settings.allowLowCard);host.emit('settings',{allowLowCard:true,rookAnytime:true});state=await pending;assert.equal(state.room.settings.rookAnytime,false);
   pending=event(host,'state',s=>s.game?.phase==='bidding');host.emit('start');state=await pending;
+  assert.equal(state.game.settings.allowLowCard,true);
+  assert.equal(state.game.settings.botDelayMs,900,'Partial settings updates preserve configured pacing');
+  assert.equal(state.game.playMode,'high');
   const bidder=state.game.turn;pending=event(clients[bidder],'state',s=>s.game?.phase==='nest');clients[bidder].emit('bid',{amount:120});state=await pending;
   const discard=state.game.hand.slice(0,5).map(c=>c.id);
   pending=event(clients[bidder],'state',s=>s.game?.phase==='playing');clients[bidder].emit('discard',{cards:discard,trump:'R',mode:'low',moon:true});state=await pending;
   assert.equal(state.game.playMode,'low');assert.deepEqual(state.game.moon,{seat:bidder,failed:false});
-  pending=event(host,'errorMsg');host.emit('settings',{allowLowCard:false});assert.match(await pending,/locked/);
+  pending=event(host,'errorMsg');host.emit('settings',{allowLowCard:false,botDelayMs:200});assert.match(await pending,/locked/);
   pending=event(spectator,'errorMsg');spectator.emit('queuePlay',{card:'ROOK'});assert.match(await pending,/pre-play/);
   const next=(bidder+1)%4,lead=state.game.hand[0];
   // Own hands from each human connection; no server-side hidden-card shortcut.
@@ -45,4 +56,9 @@ test('live table: low-card settings, private pre-play execution, chat identity a
   clients[next].emit('chat',{text:'Hello table',seat:bidder});state=await pending;
   const msg=state.room.chat.find(m=>m.text==='Hello table');assert.equal(msg.seat,next);assert.ok(msg.id);
   assert.equal('hands' in state.game,false);assert.equal('queued' in state.game,false);assert.equal('_autoPlan' in state.game,false);
+  assert.equal(state.game.settings.allowLowCard,true);
+  assert.equal(state.game.settings.botDelayMs,900,'Locked settings cannot change an active game snapshot');
+  pending=event(host,'state',s=>!s.game);host.emit('backToLobby');state=await pending;
+  assert.equal(state.room.settings.allowLowCard,true);
+  assert.equal(state.room.settings.botDelayMs,900,'Returning to the lobby preserves room settings');
 });

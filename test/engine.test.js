@@ -11,6 +11,33 @@ const ids = (cards) => cards.map((c) => c.id).sort();
 // deterministic rng
 function seeded(seed) { let s = seed >>> 0; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 2 ** 32); }
 
+test('new family defaults permit low, but an omitted declaration still plays high', () => {
+  for (const mode of [undefined, 'low']) {
+    const g = E.newGame({}, { rng: seeded(1) });
+    assert.equal(g.settings.allowLowCard, true);
+    assert.equal(g.settings.botDelayMs, 2000);
+    assert.equal(g.playMode, 'high');
+    E.applyBid(g, g.turn, 120);
+    const seat = g.turn;
+    E.applyDiscard(g, seat, g.hands[seat].slice(0, 5).map(c => c.id), 'R', mode);
+    assert.equal(g.playMode, mode ?? 'high');
+    assert.equal(g.moon, null);
+  }
+});
+
+test('explicit room settings override defaults and game snapshots remain independent', () => {
+  const settings = { allowLowCard: false, botDelayMs: 700 };
+  const g = E.newGame(settings, { rng: seeded(2) });
+  assert.equal(g.settings.allowLowCard, false);
+  assert.equal(g.settings.botDelayMs, 700);
+  settings.allowLowCard = true;
+  settings.botDelayMs = 2000;
+  assert.equal(g.settings.allowLowCard, false);
+  assert.equal(g.settings.botDelayMs, 700);
+  E.applyBid(g, g.turn, 120);
+  assert.throws(() => E.applyDiscard(g, g.turn, g.hands[g.turn].slice(0, 5).map(c => c.id), 'R', 'low'), /not enabled/);
+});
+
 test('deck: 41 cards, 5-14 in four colors plus Rook, 120 points', () => {
   const d = E.makeDeck();
   assert.equal(d.length, 41);

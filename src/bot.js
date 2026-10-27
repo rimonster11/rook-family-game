@@ -52,13 +52,13 @@ function chooseDiscard(game, seat) {
     return s;
   };
   const sorted = hand.slice().sort((a, b) => keepScore(a) - keepScore(b));
-  return { cards: sorted.slice(0, E.NEST_SIZE).map((c) => c.id), trump };
+  return { cards: sorted.slice(0, game.nestSize).map((c) => c.id), trump };
 }
 
 function isBoss(card, game) {
   // highest unplayed card of its color (excluding trump considerations)
   if (card.id === E.ROOK_ID) return true;
-  for (let r = 5; r <= 14; r++) {
+  for (let r = E.profile(game.settings).minRank; r <= 14; r++) {
     if (game.playMode === 'low' ? r >= card.rank : r <= card.rank) continue;
     const id = card.color + r;
     if (!game.played.some((p) => p.id === id)) return false;
@@ -83,7 +83,7 @@ function choosePlay(game, seat) {
   }
   const curWinner = E.trickWinner(game.trick, trump, game.playMode);
   const trickPts = E.sumPoints(game.trick.map((p) => p.card));
-  const lastToPlay = game.trick.length === 3;
+  const lastToPlay = game.trick.length === game.playerCount - 1;
   const winners = legal.filter((c) => E.trickWinner([...game.trick, { seat, card: c }], trump, game.playMode) === seat);
   if (E.teamOf(curWinner) === myTeam) {
     const partnerCard = game.trick.find((p) => p.seat === curWinner).card;

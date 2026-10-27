@@ -1,14 +1,13 @@
+import { seatPositions } from './table-layout.js';
 // 3D table, local GLB and procedural characters, card animations.
 import * as THREE from '../vendor/three.module.min.js';
 import { charOf, drawCardFace, drawCardBack, drawFeltEmblem, CW, CH, shade } from './art.js';
 
 export const TEAM_HEX = ['#4cc2ff', '#e2e8f0'];
-const POS = ['bottom', 'left', 'top', 'right'];
 const SEAT_R = 4.5; // Clear the 3.75 outer rail with both cushion and torso.
 const tableLayouts = new WeakMap();
 // Read-only rendered geometry, used by local visual regression checks.
 export const inspectTableLayout = canvas => tableLayouts.get(canvas)?.();
-const posVec = { bottom: new THREE.Vector3(0, 0, 1), left: new THREE.Vector3(-1, 0, 0), top: new THREE.Vector3(0, 0, -1), right: new THREE.Vector3(1, 0, 0) };
 
 export function webglOK() {
   try { const c = document.createElement('canvas'); return !!(window.WebGLRenderingContext && (c.getContext('webgl2') || c.getContext('webgl'))); } catch { return false; }
@@ -88,7 +87,10 @@ export function createPreview(canvas) {
 const ease = (t) => 1 - Math.pow(1 - t, 3);
 const easeIO = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
-export function createTable(container, { quality = 'high', onFps } = {}) {
+export function createTable(container, { quality = 'high', playerCount = 4, onFps } = {}) {
+  const POS=seatPositions(playerCount);
+  const posVec=Object.fromEntries(POS.map((p,i)=>[p,new THREE.Vector3(-Math.sin(i*2*Math.PI/playerCount),0,Math.cos(i*2*Math.PI/playerCount))]));
+  if(playerCount===4){posVec.bottom.set(0,0,1);posVec.left.set(-1,0,0);posVec.top.set(0,0,-1);posVec.right.set(1,0,0);}
   const canvas = document.createElement('canvas'); canvas.className = 'gl'; container.prepend(canvas);
   const hi = quality === 'high';
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: hi, powerPreference: hi ? 'high-performance' : 'low-power' });
@@ -185,7 +187,7 @@ export function createTable(container, { quality = 'high', onFps } = {}) {
   function fitScene() {
     const el = THREE.MathUtils.degToRad(THREE.MathUtils.clamp(36 + (Hh / W - 0.7) * 45, 36, 56));
     fitDir.set(0, Math.sin(el), Math.cos(el)); cam.fov = 34; cam.updateProjectionMatrix();
-    const labelMargin = container.closest('.mobile-table') ? 48 : 90;
+    const labelMargin = container.closest('.mobile-table') ? (playerCount===6?94:48) : 90;
     const mt = 2 * Math.min(labelMargin,Hh*.45) / Hh, mb = 2 * 8 / Hh, mx = 2 * 12 / W;
     const measure = (d) => {
       cam.position.copy(fitTarget).addScaledVector(fitDir, d); cam.lookAt(fitTarget); cam.updateMatrixWorld(true);
@@ -204,7 +206,7 @@ export function createTable(container, { quality = 'high', onFps } = {}) {
   const ro = new ResizeObserver(resize); ro.observe(container); resize();
 
   // ---- state ----
-  let mySeat = 0; const rel = (seat) => (seat - mySeat + 4) % 4;
+  let mySeat = 0; const rel = (seat) => (seat - mySeat + playerCount) % playerCount;
   const cards = new Map(); // id -> {obj, anim, seat, trickNo, state}
   const anims = new Set();
   let plateEls = {}; let turnPos = null;
@@ -218,6 +220,7 @@ export function createTable(container, { quality = 'high', onFps } = {}) {
   // Played cards land large, nearly square to the viewer, and spaced so corner numbers are never covered.
   // The portrait camera sits farther back, so phones get bigger cards than the desktop view.
   function slotFor(seat, order, trickNo) {
+    if(playerCount===6){const [x,z]=[[0,.85],[-1.2,.85],[-1.2,-.85],[0,-.85],[1.2,-.85],[1.2,.85]][rel(seat)];const k=cam.aspect<1?1.5:1.08;return {p:new THREE.Vector3(x*k,.03+order*.008,z*k),q:flatQFace(0),s:k};}
     const d = posVec[POS[rel(seat)]]; const jitter = ((trickNo * 7 + seat * 13) % 10 - 5) * 0.01; const k = cam.aspect < 1 ? 1.5 : 1.08;
     return { p: new THREE.Vector3(d.x * 1.03 * k, 0.03 + order * 0.008, d.z * 0.82 * k), q: flatQFace(jitter + d.x * 0.05), s: k };
   }
@@ -260,7 +263,7 @@ export function createTable(container, { quality = 'high', onFps } = {}) {
 
   function update({ g, seats: roomSeats, mySeat: ms, plays, won }) {
     if (ms !== mySeat) { mySeat = ms; for (const s of seats) { s.charIdx = -2; s.fanCount = -1; } }
-    for (let seat = 0; seat < 4; seat++) {
+    for (let seat = 0; seat < playerCount; seat++) {
       const s = seats[rel(seat)]; setSeatChar(s, roomSeats[seat], seat % 2); setFan(s, g ? g.handCounts[seat] : 0);
     }
     turnPos = g && g.turn != null && g.phase !== 'handOver' && g.phase !== 'gameOver' ? POS[rel(g.turn)] : null;
@@ -302,6 +305,7 @@ export function createTable(container, { quality = 'high', onFps } = {}) {
         const phone = !!container.closest('.mobile-table'), compact=container.classList.contains('compact-seats');
         v.copy(s.anchor).project(cam);
         const x=(v.x*.5+.5)*W,y=(-v.y*.5+.5)*Hh,ew=el.offsetWidth,eh=el.offsetHeight;
+        if(playerCount===6 && phone){const [col,row]={'upper-left':[0,0],top:[1,0],'upper-right':[2,0],'lower-left':[0,1],'lower-right':[2,1]}[s.pos];tags[s.pos]={el,ew,eh,cx:W*(col+.5)/3,cy:6+eh+row*(eh+6)};continue;}
         tags[s.pos]={el,ew,eh,cx:compact?W*(['left','top','right'].indexOf(s.pos)+.5)/3:Math.min(W-ew/2-6,Math.max(ew/2+6,x)),
           cy:compact?eh+6:Math.min(Hh-12,Math.max(eh+(phone?6:30),y))};
       }
@@ -309,6 +313,17 @@ export function createTable(container, { quality = 'high', onFps } = {}) {
     }
     // On short or narrow tables a side tag can meet the top tag; drop it just below instead of overlapping.
     const top = tags.top;
+    if(playerCount===6 && !container.closest('.mobile-table') && top) {
+      // Keep desktop names near their projected heads, with space beside the top name.
+      for(const side of ['left','right']) {
+        const upper=tags['upper-'+side],lower=tags['lower-'+side],sign=side==='left'?-1:1;
+        if(!upper||!lower)continue;
+        const gap=(top.ew+upper.ew)/2+8;
+        upper.cx=sign<0?Math.min(upper.cx,top.cx-gap):Math.max(upper.cx,top.cx+gap);
+        if(Math.abs(lower.cx-upper.cx)<(lower.ew+upper.ew)/2+6 && lower.cy-lower.eh<upper.cy+6)
+          lower.cy=Math.max(lower.cy,upper.cy+lower.eh+6);
+      }
+    }
     for (const pos of ['left', 'right']) {
       const t = tags[pos];
       if (!container.classList.contains('compact-seats') && top && t && Math.abs(t.cx - top.cx) < (t.ew + top.ew) / 2 + 4 && t.cy > top.cy - top.eh - 4 && t.cy - t.eh < top.cy + 4) t.cy = Math.min(Hh - 12, top.cy + t.eh + 6);

@@ -10,7 +10,10 @@ try { appearance = Style.normalize(JSON.parse(localStorage.getItem('rook.appeara
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const POS = ['bottom', 'left', 'top', 'right'];
+import { seatPositions } from './table-layout.js';
+import { rulesHelp } from './rules-help.js';
+const seatCount = () => S?.room.seats.length || 4;
+const teamSeats = t => S.room.seats.map((_,i)=>i).filter(i=>i%2===t);
 const TEAM_HEX = ['#4cc2ff', '#e2e8f0'];
 const NCH = CHARACTERS.length;
 
@@ -64,7 +67,7 @@ const inviteLink = () => location.origin + location.pathname + '?room=' + S.room
 const copyInvite = () => { const link = inviteLink(); if (navigator.share && matchMedia('(pointer:coarse)').matches) return navigator.share({ title: 'Join my Rook table', text: `Join my Rook table — code ${S.room.code}`, url: link }).catch(() => {}); (navigator.clipboard?.writeText(link) || Promise.reject()).then(() => toast('Invite link copied!'), () => prompt('Copy this link:', link)); };
 const leave = () => { if (confirm('Leave this table?')) { socket.emit('leave'); localStorage.removeItem('rook.room'); history.replaceState(null, '', location.pathname); S = null; closeDrawer(); show('home'); } };
 
-$('#createBtn').onclick = () => { const name = getName(); if (!name) { $('#nameInput').focus(); return toast('Tell us your name first 🙂'); } socket.emit('createRoom', { name, playerId, character: charIdx, appearance }); };
+$('#createBtn').onclick = () => { const name = getName(); if (!name) { $('#nameInput').focus(); return toast('Tell us your name first 🙂'); } socket.emit('createRoom', { mode: $('#createMode').value, name, playerId, character: charIdx, appearance }); };
 $('#joinBtn').onclick = () => { const name = getName(); const code = $('#codeInput').value.trim().toUpperCase(); if (!name) { $('#nameInput').focus(); return toast('Tell us your name first 🙂'); } if (code.length !== 4) return toast('Table codes are 4 characters'); socket.emit('joinRoom', { name, playerId, code, character: charIdx, appearance }); };
 $('#codeInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#joinBtn').click(); });
 $('#nameInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') ($('#codeInput').value.trim().length === 4 ? $('#joinBtn') : $('#createBtn')).click(); });
@@ -165,7 +168,7 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
 
 // ---------- helpers ----------
 const mySeat = () => (S && S.you.seat >= 0 ? S.you.seat : 0);
-const relPos = (seat) => POS[(seat - mySeat() + 4) % 4];
+const relPos = (seat) => seatPositions(seatCount())[(seat - mySeat() + seatCount()) % seatCount()];
 const seatName = (seat) => (S.room.seats[seat]?.name || `Seat ${seat + 1}`);
 const teamName = (t) => S.room.teams?.[t]?.name || `Team ${t + 1}`;
 const ava = (seat, ring) => avatarSVG(S.room.seats[seat]?.character ?? 0, { ring, appearance: S.room.seats[seat]?.appearance });
@@ -174,6 +177,8 @@ const pill = (col) => `<span class="pill s-${col}">${SUIT[col].name}</span>`;
 // ---------- render ----------
 function render() {
   if (!S) return show('home');
+  document.body.classList.toggle('six-player',seatCount()===6);
+  for(const id of ['#lobbyHelpBody','#drawerHelpBody']) $(id).innerHTML=rulesHelp(S.game?.settings || S.room.settings);
   renderChat();
   if (!S.game) { if (table) { table.dispose(); table = null; } show('lobby'); renderLobby(); return; }
   show('game'); renderGame();
@@ -195,17 +200,17 @@ const SETTINGS_FIELDS = [
   ['targetScore', 'number', 'Winning score'],
   ['openerMustBid', 'checkbox', 'Opening player must bid', 'Turn off to let the first player pass.'],
   ['allPassRule', ['dealerStuck', 'redeal'], 'If everyone passes', 'Only applies when the opener may pass.'],
-  ['allowLowCard', 'checkbox', 'Allow low-card hands', 'The bidder chooses high or low after taking the nest. Rook always wins; everyone must follow suit.'],
+  ['allowLowCard', 'checkbox', 'Allow low-card hands', 'On by default. High stays selected unless the bidder chooses low with the nest. Turn off to allow only high. Rook always wins; everyone must follow suit.'],
   ['bidderLeads', 'checkbox', 'Winning bidder leads first trick', 'Off: player left of dealer leads.'],
   ['winRule', ['bidderMustMake', 'anyReach'], 'How to win', 'Choose whether the winning team must also make its bid.'],
   ['flipNestCard', 'checkbox', 'Show one nest card', 'A little clue while everyone bids.'],
-  ['botDelayMs', 'number', 'Bot pace (ms)', '700 is relaxed. 200 is quick.'],
+  ['botDelayMs', 'number', 'Bot pace (ms)', '2000 (2 seconds) by default; adjustable from 200 to 3000. A brief pause is added between tricks.'],
 ];
 const SETTING_LABELS = { dealerStuck: 'Dealer takes the minimum', redeal: 'Shuffle and deal again', bidderMustMake: 'Make your bid to win', anyReach: 'First team to the target' };
 function renderSettings() {
   const f = $('#settingsForm'); const s = S.room.settings; const locked = !S.you.isHost;
   if (f.contains(document.activeElement)) return;
-  f.innerHTML = SETTINGS_FIELDS.map(([k, type, label, help]) => {
+  f.innerHTML = SETTINGS_FIELDS.filter(([k])=>seatCount()===4 || k==='botDelayMs').map(([k, type, label, help]) => {
     let inp;
     const a11y = `id="setting-${k}" aria-labelledby="label-${k}" ${help ? `aria-describedby="help-${k}"` : ''}`;
     if (Array.isArray(type)) inp = `<select name="${k}" ${a11y} ${locked ? 'disabled' : ''}>${type.map((o) => `<option value="${o}" ${s[k] === o ? 'selected' : ''}>${SETTING_LABELS[o] || o}</option>`).join('')}</select>`;
@@ -223,7 +228,11 @@ function renderLobby() {
   renderTeams($('#teamCards'));
   $('#lobbyCode').textContent = S.room.code;
   const host = S.you.isHost;
-  $('#lobbySeats').innerHTML = [0, 1, 2, 3].map((i) => {
+  $('#lobbyMode').value=S.room.settings.mode || 'family4';
+  $('#lobbyMode').disabled=!host || S.room.seats.some(s=>s && !s.isHost);
+  $('#lobbyMode').onchange=e=>socket.emit('setMode',{mode:e.target.value});
+  $('.teams-note').textContent=seatCount()===6?'Alternating seats form teams of three':'Partners sit across';
+  $('#lobbySeats').innerHTML = S.room.seats.map((_,i) => {
     const s = S.room.seats[i]; const mine = S.you.seat === i;
     const who = s ? `<div class="lava">${ava(i, TEAM_HEX[i % 2])}</div><div class="who">${esc(s.name)}${s.type === 'bot' ? '<span class="botbadge">BOT</span>' : ''}${s.isHost ? '<span class="hostbadge">HOST</span>' : ''}</div><div class="sub">${esc(charOf(s.character).label)}${s.type === 'human' && !s.connected ? ' · away' : ''}</div>`
       : `<div class="lava empty">+</div><div class="who muted">Empty chair</div><div class="sub">&nbsp;</div>`;
@@ -233,7 +242,7 @@ function renderLobby() {
     if (host && !s) btns += `<button class="btn tiny outline" data-melissa="${i}">Add Melissa</button>`;
     if (host && !s) btns += `<button class="btn tiny outline" data-bot="${i}">${icon('bot')}Add bot</button>`;
     if (host && s?.type === 'bot') btns += `<button class="btn tiny ghost" data-clear="${i}">Remove</button>`;
-    return `<div class="lseat t${i % 2} ${mine ? 'mine' : ''}" style="--seat-order:${[0, 2, 1, 3][i]}"><div class="seatno">Seat ${i + 1}${mine ? ' · You' : ''}</div><div class="seat-team"><span class="tdot t${i % 2}"></span>${esc(teamName(i % 2))}</div>${who}<div class="btns">${btns}</div></div>`;
+    return `<div class="lseat t${i % 2} ${mine ? 'mine' : ''}" style="--seat-order:${seatCount()===4?[0, 2, 1, 3][i]:i}"><div class="seatno">Seat ${i + 1}${mine ? ' · You' : ''}</div><div class="seat-team"><span class="tdot t${i % 2}"></span>${esc(teamName(i % 2))}</div>${who}<div class="btns">${btns}</div></div>`;
   }).join('');
   $$('[data-sit]').forEach((b) => (b.onclick = () => socket.emit('sit', { seat: +b.dataset.sit })));
   $$('[data-stand]').forEach((b) => (b.onclick = () => socket.emit('stand')));
@@ -254,8 +263,8 @@ function renderTeams(el) {
   el.innerHTML = [0, 1].map((t) => {
     const team = S.room.teams?.[t], p = team?.proposal;
     const mine = S.you.seat >= 0 && S.you.seat % 2 === t;
-    const ready = S.room.seats[t] && S.room.seats[t + 2];
-    return `<section class="team-card t${t}"><div class="team-card-heading">${icon('trophy')}<strong>${esc(teamName(t))}</strong>${mine ? '<span class="you-tag">YOUR TEAM</span>' : ''}</div><div class="team-partners">${[t, t + 2].map((i) => esc(S.room.seats[i]?.name || 'Open seat')).join(' + ')}</div>${p ? `<div class="name-proposal"><span>Proposed: <b>${esc(p.name)}</b></span>${mine ? p.approvals.includes(S.you.seat) ? '<small>Waiting for your teammate</small>' : `<button class="btn tiny primary" data-approve="${esc(p.id)}">${icon('check')}Accept</button>` : '<small>Awaiting teammate approval</small>'}${mine ? `<button class="btn tiny ghost" data-reject="${esc(p.id)}">${p.approvals.includes(S.you.seat) ? 'Cancel' : 'Decline'}</button>` : ''}</div>` : ''}${mine ? `<form class="team-name-form" data-team-form><input aria-label="Propose a team name" maxlength="24" placeholder="Name your team" ${ready ? '' : 'disabled'}><button class="btn tiny outline" ${ready ? '' : 'disabled'}>Propose</button></form><small class="team-help">${ready ? 'Both teammates agree. Bots approve automatically.' : 'Your partner sits across, two seats away.'}</small>` : ''}</section>`;
+    const ready = teamSeats(t).every(i=>S.room.seats[i]);
+    return `<section class="team-card t${t}"><div class="team-card-heading">${icon('trophy')}<strong>${esc(teamName(t))}</strong>${mine ? '<span class="you-tag">YOUR TEAM</span>' : ''}</div><div class="team-partners">${teamSeats(t).map((i) => esc(S.room.seats[i]?.name || 'Open seat')).join(' + ')}</div>${p ? `<div class="name-proposal"><span>Proposed: <b>${esc(p.name)}</b></span>${mine ? p.approvals.includes(S.you.seat) ? '<small>Waiting for your teammate</small>' : `<button class="btn tiny primary" data-approve="${esc(p.id)}">${icon('check')}Accept</button>` : '<small>Awaiting teammate approval</small>'}${mine ? `<button class="btn tiny ghost" data-reject="${esc(p.id)}">${p.approvals.includes(S.you.seat) ? 'Cancel' : 'Decline'}</button>` : ''}</div>` : ''}${mine ? `<form class="team-name-form" data-team-form><input aria-label="Propose a team name" maxlength="24" placeholder="Name your team" ${ready ? '' : 'disabled'}><button class="btn tiny outline" ${ready ? '' : 'disabled'}>Propose</button></form><small class="team-help">${ready ? 'All teammates must agree. Bots approve automatically.' : 'Teammates occupy alternating seats.'}</small>` : ''}</section>`;
   }).join('');
   $$('[data-team-form]', el).forEach((form) => form.onsubmit = (event) => { event.preventDefault(); const name = $('input', form).value.trim(); if (name) socket.emit('proposeTeamName', { name }); });
   $$('[data-approve]', el).forEach((b) => b.onclick = () => socket.emit('respondTeamName', { id: b.dataset.approve, accept: true }));
@@ -270,7 +279,7 @@ function renderHandTracker(g) {
   else if (p.status === 'chasing') label = `${teamName(p.team)} · Need ${p.needed} to make ${p.amount}`;
   let detail = p.status === 'chasing' ? `Can give up ${p.cushion} more points` : p.status === 'secured' ? `${p.points[p.team] - p.amount} above the bid` : p.status === 'set' ? 'Keep playing for the final score' : 'Captured points appear after each trick';
   if(g.moon){label=g.moon.failed?'Moon failed: -500 at hand end':`Moon attempt: ${g.personalTricks[g.moon.seat]} / 9 personal tricks`;detail=g.moon.failed?'Someone else took a trick':`${seatName(g.moon.seat)} must win every trick: +500 or -500`;}
-  $('#handTracker').innerHTML = `<div class="hand-label"><span class="eyebrow">HAND ${g.handNo}</span><span>${g.trickNo} / 9 tricks</span></div>${[0, 1].map((t) => `<div class="hand-team t${t}"><div><span>${esc(teamName(t))}${g.bid?.team === t ? ' · bidding' : ''}</span><b>${p.points[t]}<small> pts</small></b></div><div class="points-track" role="progressbar" aria-label="${esc(teamName(t))} captured points" aria-valuemin="0" aria-valuemax="120" aria-valuenow="${p.points[t]}"><span style="width:${p.points[t] / 1.2}%"></span>${g.bid?.team === t && !g.moon ? `<i style="left:${g.bid.amount / 1.2}%" title="Bid ${g.bid.amount}"></i>` : ''}</div></div>`).join('')}<div class="bid-tracker ${p.status}" role="status">${g.trump ? `<span class="ht-trump">${g.playMode === 'low' ? 'Low · ' : ''}${pill(g.trump)}</span>` : ''}<strong>${esc(label)}</strong><span>${esc(detail)} · ${p.remaining} unawarded</span></div><span class="nest-note">Nest awarded on last trick</span>`;
+  $('#handTracker').innerHTML = `<div class="hand-label"><span class="eyebrow">HAND ${g.handNo}</span><span>${g.trickNo} / ${g.handSize || 9} tricks</span></div>${[0, 1].map((t) => `<div class="hand-team t${t}"><div><span>${esc(teamName(t))}${g.bid?.team === t ? ' · bidding' : ''}</span><b>${p.points[t]}<small> pts</small></b></div><div class="points-track" role="progressbar" aria-label="${esc(teamName(t))} captured points" aria-valuemin="0" aria-valuemax="120" aria-valuenow="${p.points[t]}"><span style="width:${p.points[t] / 1.2}%"></span>${g.bid?.team === t && !g.moon ? `<i style="left:${g.bid.amount / 1.2}%" title="Bid ${g.bid.amount}"></i>` : ''}</div></div>`).join('')}<div class="bid-tracker ${p.status}" role="status">${g.trump ? `<span class="ht-trump">${g.playMode === 'low' ? 'Low · ' : ''}${pill(g.trump)}</span>` : ''}<strong>${esc(label)}</strong><span>${esc(detail)} · ${p.remaining} unawarded</span></div><span class="nest-note">Nest awarded on last trick</span>`;
 }
 
 function statusText(g) {
@@ -278,8 +287,8 @@ function statusText(g) {
   const who = t !== null && t !== undefined ? (mine ? 'You' : seatName(t)) : '';
   switch (g.phase) {
     case 'bidding': return [mine ? 'Your bid' : `${who} is bidding…`, mine];
-    case 'nest': return [mine ? 'You won the bid — bury 5 cards and name trump' : `${who} is looking at the nest…`, mine];
-    case 'playing': if(g.autoFinish)return ['Laying it down: playing out guaranteed winners',false]; return [mine ? (g.trick.length ? 'Your turn — follow the led color if you can' : 'Your lead') : `${who}'s turn`, mine];
+    case 'nest': return [mine ? `You won the bid — bury ${g.nestSize || 5} cards and name trump` : `${who} is looking at the nest…`, mine];
+    case 'playing': if(g.autoFinish)return ['Laying it down: playing out guaranteed winners',false]; return [mine ? (g.trick.length ? (seatCount()===6 ? 'Your turn — follow color, or play the Rook' : 'Your turn — follow the led color if you can') : 'Your lead') : `${who}'s turn`, mine];
     case 'handOver': return ['Hand complete', false];
     case 'gameOver': return [`Game over — ${teamName(g.winner)} win!`, false];
   }
@@ -290,7 +299,7 @@ function ensureTable() {
   const area = $('#tableArea');
   const want3d = gfx !== '2d';
   if (want3d && !table && T3) {
-    try { table = T3.createTable(area, { quality: gfx, onFps: (f) => { if (gfx === 'high' && f < 22) { toast('Switching to 3D Lite for smoother play'); setGfx('low'); } } }); }
+    try { table = T3.createTable(area, { quality: gfx, playerCount:seatCount(), onFps: (f) => { if (gfx === 'high' && f < 22) { toast('Switching to 3D Lite for smoother play'); setGfx('low'); } } }); }
     catch (e) { console.warn('3D init failed', e); gfx = '2d'; renderGfxSeg(); }
   }
   if (want3d && !T3) load3D().then((m) => { if (m && S?.game) renderGame(); else if (!m && gfx !== '2d') { gfx = '2d'; renderGfxSeg(); if (S?.game) renderGame(); } });
@@ -319,6 +328,13 @@ function plateHTML(seat, g) {
 function renderGame() {
   if(!S?.game)return;
   const g = S.game; const me = S.you.seat;
+  const area=$('#tableArea');
+  if(area.dataset.seats!==String(seatCount())){
+    if(table){table.dispose();table=null;}
+    $$('.seat',area).forEach(el=>el.remove());
+    for(const pos of seatPositions(seatCount())){const el=document.createElement('div');el.className='seat pos-'+pos;el.id='seat-'+pos;area.append(el);}
+    area.dataset.seats=seatCount();
+  }
   $('#game').dataset.phase = g.phase;
   clearTimeout(bubbleTimer);
   const fresh=S.room.chat.filter(m=>m.from && Date.now()-m.t<6500);
@@ -326,15 +342,15 @@ function renderGame() {
   const last=g.lastTrick;
   const recent=$('#recentTrickCards');
   const lastKey=`${S.room.code}:${g.handNo}:${last?.no||0}`;
-  if(recent.dataset.key!==lastKey){recent.dataset.key=lastKey;recent.innerHTML=last?`<p>Trick ${last.no}: ${esc(seatName(last.winner))} won - ${last.points} pts${last.last?' (includes nest)':''}</p><div class="recent-cards">${last.plays.map(p=>`<div class="${p.seat===last.winner?'trick-winner':''}">${cardHTML(p.card,'xs',g.trump)}<span>${esc(seatName(p.seat))}${p.seat===last.winner?'<small class="winner-label">Winner</small>':''}</span></div>`).join('')}</div>`:'<p>The last four played cards will stay here.</p>';}
-  if(dealKey!==`${S.room.code}:${g.dealtAt}`){dealKey=`${S.room.code}:${g.dealtAt}`;lastTrickShownNo=g.lastTrick?.no||0;lastTrickUntil=0;shownRecapHand=0;pickedMode='high';pickedMoon=false;prevHandIds=null;if(g.phase==='bidding'&&Date.now()-g.dealtAt<4000)animateDeal($('#tableArea'),backHTML,g.dealer,relPos);}
+  if(recent.dataset.key!==lastKey){recent.dataset.key=lastKey;recent.innerHTML=last?`<p>Trick ${last.no}: ${esc(seatName(last.winner))} won - ${last.points} pts${last.last?' (includes nest)':''}</p><div class="recent-cards">${last.plays.map(p=>`<div class="${p.seat===last.winner?'trick-winner':''}">${cardHTML(p.card,'xs',g.trump)}<span>${esc(seatName(p.seat))}${p.seat===last.winner?'<small class="winner-label">Winner</small>':''}</span></div>`).join('')}</div>`:'<p>The last completed trick will stay here.</p>';}
+  if(dealKey!==`${S.room.code}:${g.dealtAt}`){dealKey=`${S.room.code}:${g.dealtAt}`;lastTrickShownNo=g.lastTrick?.no||0;lastTrickUntil=0;shownRecapHand=0;pickedMode='high';pickedMoon=false;prevHandIds=null;if(g.phase==='bidding'&&Date.now()-g.dealtAt<4000)animateDeal($('#tableArea'),backHTML,g.dealer,relPos,{playerCount:seatCount(),handSize:g.handSize||9,nestSize:g.nestSize||5});}
   renderHandTracker(g); renderTeams($('#drawerTeams'));
   ensureTable();
   if (g.handNo !== lastHandNo) { lastHandNo = g.handNo; lastTrickShownNo = g.lastTrick?.no ?? 0; bidChoice = null; }
   $('#gameCode').textContent = S.room.code;
   $('#scoreboard').innerHTML = [0, 1].map((t) => `<div class="score t${t} ${g.scores[t] < 0 ? 'neg' : ''} ${me >= 0 && me % 2 === t ? 'mine' : ''}"><div class="n">${g.scores[t]}</div><div class="l">${esc(teamName(t))}</div></div>`).join('<div class="vs">of ' + g.settings.targetScore + '</div>');
   const plates = {};
-  for (let seat = 0; seat < 4; seat++) {
+  for (let seat = 0; seat < seatCount(); seat++) {
     const pos = relPos(seat); const el = $('#seat-' + pos);
     const backs = !table && pos !== 'bottom' ? `<div class="backs">${'<div class="cb"></div>'.repeat(Math.min(g.handCounts[seat], 14))}</div>` : '';
     el.innerHTML = pos === 'top' ? backs + plateHTML(seat, g) : plateHTML(seat, g) + backs;
@@ -392,7 +408,7 @@ function renderHand(g) {
   const signature=JSON.stringify([S.room.code,g.handNo,g.phase,g.turn,g.hand,g.legal,g.queuedCard,g.autoFinish,[...picked],g.trump]);
   if(el.dataset.signature===signature)return;el.dataset.signature=signature;
   const ids = g.hand.map((c) => c.id);
-  if (g.phase === 'nest' && g.turn === me) { if (prevHandIds && prevHandIds.length === 9 && nestIds.size === 0) nestIds = new Set(ids.filter((i) => !prevHandIds.includes(i))); }
+  if (g.phase === 'nest' && g.turn === me) { if (prevHandIds && prevHandIds.length === (g.handSize || 9) && nestIds.size === 0) nestIds = new Set(ids.filter((i) => !prevHandIds.includes(i))); }
   else nestIds = new Set();
   if (g.phase !== 'nest') { picked = new Set(); pickedTrump = null; }
   const newIds = prevHandIds && ids.length > prevHandIds.length + 1 ? new Set(ids) : null; // freshly dealt
@@ -417,7 +433,7 @@ function renderHand(g) {
     if (playing && legal.has(id)) { socket.emit('play', { card: id }); cEl.classList.add('played'); el.classList.remove('active'); }
     else if(g.phase==='playing' && g.turn!==me){socket.emit('queuePlay',{card:g.queuedCard===id?null:id});}
     else if (playing) toast('You must follow the led color');
-    else if (nesting) { if (picked.has(id)) picked.delete(id); else if (picked.size < 5) picked.add(id); else toast('Only 5 go back in the nest'); renderHand(g); renderAction(g); }
+    else if (nesting) { if (picked.has(id)) picked.delete(id); else if (picked.size < (g.nestSize || 5)) picked.add(id); else toast(`Only ${g.nestSize || 5} go back in the nest`); renderHand(g); renderAction(g); }
   }));
 }
 
@@ -438,13 +454,13 @@ function renderAction(g) {
   } else if (g.phase === 'nest' && myTurn) {
     const selPts = g.hand.filter((c) => picked.has(c.id)).reduce((s, c) => s + cardPts(c), 0);
     a.classList.add('panelish');
-    a.innerHTML = `<div class="nestpanel"><div class="np-l"><div class="bp-k">Bury</div><div class="bp-v">${picked.size}<small>/5</small></div><div class="bp-s">${selPts ? `<span>${selPts} pts</span><span class="nest-point-note"> → last trick</span>` : '<span class="nest-empty-hint">Tap cards to bury</span>'}</div></div>
+    a.innerHTML = `<div class="nestpanel"><div class="np-l"><div class="bp-k">Bury</div><div class="bp-v">${picked.size}<small>/${g.nestSize || 5}</small></div><div class="bp-s">${selPts ? `<span>${selPts} pts</span><span class="nest-point-note"> → last trick</span>` : '<span class="nest-empty-hint">Tap cards to bury</span>'}</div></div>
       <div class="np-t"><div class="bp-k">Name trump</div><div class="trumps">${['R', 'B', 'G', 'Y'].map((c) => `<button class="trumpbtn s-${c} ${pickedTrump === c ? 'sel' : ''}" data-trump="${c}" aria-label="${SUIT[c].name}"><span>${SUIT[c].name}</span><em>${g.hand.filter((x) => x.color === c && !picked.has(x.id)).length}</em></button>`).join('')}</div></div>
-      <div class="nest-options">${g.settings.allowLowCard?`<label>Card order<select id="playMode"><option value="high" ${pickedMode==='high'?'selected':''}>High wins</option><option value="low" ${pickedMode==='low'?'selected':''}>Low wins - Rook still highest</option></select></label>`:''}<label class="moon-choice"><input type="checkbox" id="moonChoice" ${pickedMoon?'checked':''}> Shoot the moon</label><small>Personally win all 9 tricks: +500. Anyone else wins one: -500.</small></div>
-      <button class="btn primary" id="discardBtn" ${picked.size === 5 && pickedTrump ? '' : 'disabled'}>Confirm</button></div>`;
+      <div class="nest-options">${g.settings.allowLowCard?`<label>Card order<select id="playMode"><option value="high" ${pickedMode==='high'?'selected':''}>High wins</option><option value="low" ${pickedMode==='low'?'selected':''}>Low wins - Rook still highest</option></select></label>`:''}${seatCount()===4?`<label class="moon-choice"><input type="checkbox" id="moonChoice" ${pickedMoon?'checked':''}> Shoot the moon</label><small>Personally win all 9 tricks: +500. Anyone else wins one: -500.</small>`:''}</div>
+      <button class="btn primary" id="discardBtn" ${picked.size === (g.nestSize || 5) && pickedTrump ? '' : 'disabled'}>Confirm</button></div>`;
     $$('[data-trump]', a).forEach((b) => (b.onclick = () => { pickedTrump = b.dataset.trump; renderAction(g); renderHand(g); }));
     const mode=$('#playMode');if(mode)mode.onchange=()=>{pickedMode=mode.value;};
-    $('#moonChoice').onchange=e=>{pickedMoon=e.target.checked;};
+    const moon=$('#moonChoice');if(moon)moon.onchange=e=>{pickedMoon=e.target.checked;};
     $('#discardBtn').onclick = () => {if(pickedMoon&&!confirm('Shoot the moon? You personally must win all 9 tricks for +500. Even one trick won by your partner means -500.'))return;socket.emit('discard', { cards: [...picked], trump: pickedTrump, mode:pickedMode, moon:pickedMoon });};
   } else if (g.phase === 'playing' && g.bid?.seat === me && g.myDiscard?.length) {
     a.innerHTML = `<details class="buried"><summary>Your buried nest</summary><div class="cardrow">${g.myDiscard.map((c) => cardHTML(c, 'xs')).join('')}</div></details>`;
@@ -482,7 +498,7 @@ function showRecap() {
   if (over) {
     const win = myTeam === g.winner;
     html += `<div class="go-head ${win ? 'win' : ''}"><div class="trophy">${birdSVG('#fff', '#0a1f5c', 'rgba(10,31,92,.25)')}</div><div class="go-k">${myTeam === null ? 'Game over' : win ? 'Victory!' : 'Good game!'}</div><h2>${esc(teamName(g.winner))} win</h2>
-      <div class="go-avas">${[g.winner, g.winner + 2].map((s) => `<div>${ava(s, TEAM_HEX[g.winner])}<span>${esc(seatName(s))}</span></div>`).join('')}</div></div>`;
+      <div class="go-avas">${teamSeats(g.winner).map((s) => `<div>${ava(s, TEAM_HEX[g.winner])}<span>${esc(seatName(s))}</span></div>`).join('')}</div></div>`;
     if (win) html += `<div class="confetti" aria-hidden="true">${Array.from({ length: 28 }, (_, i) => `<i style="--d:${(i * 37) % 100}%;--t:${(i % 7) * 0.25}s;--c:${['#4cc2ff', '#ffffff', '#1d4fc4', '#c7d2fe'][i % 4]}"></i>`).join('')}</div>`;
   } else html += `<div class="rc-k">Hand ${r.handNo}</div><h2>Hand recap</h2>`;
   if(r.moon) html+=`<div class="moon-banner">Shoot the moon: ${r.made?'all nine tricks won personally: +500':'attempt failed: -500'}</div>`;

@@ -1,0 +1,53 @@
+/* Six-player adaptations leave the established four-seat table styles intact. */
+#createMode,#lobbyMode{width:100%;margin:6px 0 12px;min-height:44px}
+.mode-help{padding:10px 12px;border:1px solid var(--line);border-radius:14px;margin:8px 0;background:#10243e}
+.mode-help summary{cursor:pointer;font-weight:800;min-height:28px}
+.mode-help p{font-size:13px;line-height:1.55;margin:10px 0}.mode-help h3{margin:8px 0}
+.mode-help a{color:#9fdcff}.drawer .mode-help{flex-shrink:0}
+.six-player .lobby-seats{grid-template-columns:repeat(3,minmax(0,1fr))}
+.six-player .recent-cards{grid-template-columns:repeat(6,minmax(0,1fr))}
+.six-player .mode3d .seat:not(.pos-bottom){left:0;top:0;right:auto;bottom:auto;will-change:transform}
+.six-player .table-area .seat:not(.pos-bottom){max-width:30%}
+.six-player .mode2d .seat:not(.pos-bottom){top:10px;bottom:auto;transform:translateX(-50%)}
+.six-player .mode2d .pos-upper-left,.six-player .mode2d .pos-lower-left{left:17%;right:auto}
+.six-player .mode2d .pos-top{left:50%;right:auto}
+.six-player .mode2d .pos-upper-right,.six-player .mode2d .pos-lower-right{left:83%;right:auto}
+.six-player .mode2d .seat.pos-lower-left:not(.pos-bottom),.six-player .mode2d .seat.pos-lower-right:not(.pos-bottom){top:110px}
+.six-player .mode2d .backs{display:none}
+.six-player .slot{left:0;top:0}
+.six-player .slot.s-upper-left{left:-88px;top:-62px}.six-player .slot.s-top{top:-62px}.six-player .slot.s-upper-right{left:88px;top:-62px}
+.six-player .slot.s-lower-left{left:-88px;top:62px}.six-player .slot.s-bottom{top:62px}.six-player .slot.s-lower-right{left:88px;top:62px}
+.six-player .nest-options:empty{display:none}
+@media(max-width:640px){
+ .six-player .lobby-seats{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .six-player .recent-cards{grid-template-columns:repeat(6,minmax(0,1fr))}
+ .six-player .recent-cards .card{--cw:min(48px,calc((100vw - 72px) / 6))}
+}
+@media(max-width:640px),(max-height:500px) and (pointer:coarse){
+ .six-player .table-area .seat.pos-bottom{display:none}
+ .six-player .mobile-table .mode2d .seat:not(.pos-bottom){top:4px;transform:translateX(-50%)!important;width:30%;max-width:110px}
+ .six-player .mobile-table .mode2d .seat.pos-lower-left:not(.pos-bottom),.six-player .mobile-table .mode2d .seat.pos-lower-right:not(.pos-bottom){top:48px}
+ .six-player .mobile-table .mode2d .center{top:65%}
+ .six-player .mobile-table .slot .card{--cw:48px}
+ .six-player .mobile-table .slot.s-upper-left{left:-55px;top:-36px}.six-player .mobile-table .slot.s-top{top:-36px}.six-player .mobile-table .slot.s-upper-right{left:55px;top:-36px}
+ .six-player .mobile-table .slot.s-lower-left{left:-55px;top:36px}.six-player .mobile-table .slot.s-bottom{top:36px}.six-player .mobile-table .slot.s-lower-right{left:55px;top:36px}
+ .six-player .mobile-table .hand-wrap:has(.nest-grid){height:210px;flex-basis:210px}
+ .six-player .mobile-table .hand.nest-grid{grid-template-columns:repeat(6,minmax(0,1fr));--nest-card-height:64px}
+ .six-player .mobile-table .nestpanel{grid-template-columns:45px minmax(0,1fr) auto}
+}
+@media(min-width:641px) and (max-height:500px) and (pointer:coarse){
+ .six-player #game.mobile-table:has(#recentTrick[open]){grid-template-rows:auto auto minmax(80px,1fr) auto}
+ .six-player .mobile-table:has(#recentTrick[open]) .table-area{min-height:80px}
+ body:not(.six-player) .mobile-table:has(#recentTrick[open]) .mode2d .pos-bottom{display:none}
+ .six-player .mobile-table .hand-wrap:has(.nest-grid){height:180px;flex-basis:180px}
+ .six-player .mobile-table .hand.nest-grid{--nest-card-height:54px}
+ /* History shortens the existing 2D table: keep its labels in one row. */
+ body:not(.six-player) .mobile-table:has(#recentTrick[open]) .mode2d .seat:not(.pos-bottom){top:4px;transform:translateX(-50%)!important;width:30%;max-width:110px}
+ body:not(.six-player) .mobile-table:has(#recentTrick[open]) .mode2d .pos-left{left:17%}
+ body:not(.six-player) .mobile-table:has(#recentTrick[open]) .mode2d .pos-top{left:50%}
+ body:not(.six-player) .mobile-table:has(#recentTrick[open]) .mode2d .pos-right{left:83%;right:auto}
+}
+@media(max-width:640px) and (max-height:700px){
+ body:not(.six-player) .mobile-table:has(#recentTrick[open]) .mode2d .pos-bottom{display:none}
+ .six-player .mobile-table:has(#recentTrick[open]) .table-area{min-height:90px}
+}

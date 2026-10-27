@@ -24,13 +24,13 @@ export function installSwipes({ active, chatOpen, scoreOpen, openChat, closeChat
   }, {passive:true});
 }
 
-export function animateDeal(container, backHTML, dealer, relPos) {
+export function animateDeal(container, backHTML, dealer, relPos, {playerCount=4,handSize=9,nestSize=5}={}) {
   container.querySelector('.deal-sequence')?.remove();
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   const layer=document.createElement('div');layer.className='deal-sequence';layer.setAttribute('aria-hidden','true');
   const w=container.clientWidth,h=container.clientHeight;
-  const dest={bottom:[0,h*.37],top:[0,-h*.34],left:[-w*.36,0],right:[w*.36,0],nest:[0,0]};
+  const dest={bottom:[0,h*.37],top:[0,-h*.34],left:[-w*.36,0],right:[w*.36,0],'lower-left':[-w*.34,h*.22],'upper-left':[-w*.34,-h*.22],'upper-right':[w*.34,-h*.22],'lower-right':[w*.34,h*.22],nest:[0,0]};
   layer.innerHTML=`<div class="shuffle-stack">${backHTML('xs')}${backHTML('xs')}${backHTML('xs')}<b>Shuffling…</b></div>`+
-    Array.from({length:41},(_,i)=>{const pos=i<36?relPos((dealer+1+i)%4):'nest';const [x,y]=dest[pos];return `<div class="deal-flight" style="--dx:${x}px;--dy:${y}px;--delay:${700+i*32}ms">${backHTML('xs')}</div>`;}).join('');
-  container.append(layer);setTimeout(()=>layer.remove(),2600);
+    Array.from({length:playerCount*handSize+nestSize},(_,i)=>{const pos=i<playerCount*handSize?relPos((dealer+1+i)%playerCount):'nest';const [x,y]=dest[pos];return `<div class="deal-flight" style="--dx:${x}px;--dy:${y}px;--delay:${700+i*32}ms">${backHTML('xs')}</div>`;}).join('');
+  container.append(layer);setTimeout(()=>layer.remove(),playerCount===4?2600:3200);
 }

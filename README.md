@@ -1,13 +1,13 @@
 # Rook Night 🐦 — play Rook online with family & friends
 
-A cozy, browser-based Rook table for 4 players (2 teams of 2, partners across), using our family rules.
+A cozy, browser-based Rook table with Family Four and Partnership for Six modes.
 Node.js + Express + Socket.IO; the server is authoritative and each client only ever receives its own hand.
 
 ## Run
 ```bash
 npm install
 npm start            # http://localhost:3000  (PORT env var to change)
-npm test             # unit tests for the rules engine + 25 simulated 4-bot games
+npm test             # engine, socket, appearance and 4-/6-player simulation tests
 npm run sim -- 20    # simulate 20 bot-only games and print results
 node scripts/e2e-socket.js http://localhost:3000   # socket smoke test: 1 scripted human + 3 bots, full game
 ```
@@ -18,16 +18,53 @@ starts its own temporary server on an available port.
 To share over the internet without hosting: `cloudflared tunnel --url http://localhost:3000` (prints a temporary `*.trycloudflare.com` URL).
 
 ## How to play
-1. Open the site, type your name, **Start a new table**. You get a 4-letter code + **Copy invite link**.
-2. Friends open the link (or enter the code). Everyone picks a chair; seats 1 & 3 are Team 1, seats 2 & 4 are Team 2.
+1. Open the site, type your name, choose the game mode, and **Create a table**. You get a 4-letter code + **Copy invite link**.
+2. Friends open the link (or enter the code). Alternating chairs form teams: 1 & 3 against 2 & 4 in Family Four; 1, 3 & 5 against 2, 4 & 6 in Partnership for Six.
 3. Host can **Add bot** / **Fill empty seats with bots** (bots get friendly names and a BOT badge), tweak house rules, then **Deal 'em!**
-4. **Bidding**: on your turn use the quick buttons (next valid bid, +5, +10) or pick any higher multiple from the dropdown, or Pass.
-5. **Nest**: the winning bidder gets the 5 nest cards (marked "nest"), taps 5 cards to bury, picks a trump color, and confirms.
+4. **Bidding**: use the minus/plus stepper to choose a valid bid, then Bid, or Pass when permitted.
+5. **Nest**: the winning bidder picks up the nest, selects cards to bury (five in Family Four, nine in Partnership for Six), chooses trump, and confirms.
 6. **Play**: legal cards are bright; others are dimmed and can't be played. Completed tricks linger briefly showing who took them.
 7. After each hand a recap shows points, made/set, score changes and the buried nest. 📋 = scorecard, 💬 = chat + game log.
 8. Refreshing the page or losing connection reconnects you to your seat automatically (same browser). The host can replace a disconnected player with a bot; a spectator can take over a bot seat mid-game.
 
-## Family rules (implemented, authoritative)
+## Partnership for Six
+
+Choose **Family Four** or **Partnership for Six** when creating a table, or in the
+seating lobby before others sit. Only the host may change modes. Other humans
+must stand and bots must be explicitly removed first; an occupied seat is never
+silently dropped. Mode stays locked for the match. Each mode remembers its own
+room settings when switching back. Existing Family Four settings remain intact.
+
+Six uses all 57 cards (1–14 plus Rook), eight cards per player and a nine-card
+nest, with alternating teams of three. The bidder picks up 17 and buries nine.
+The player left of the dealer leads first; six cards complete a trick and eight
+tricks complete a hand. The Rook may be played at any time; other cards follow
+suit. The last trick earns the nest. There are 120 counter points and no trick
+bonus; a set team loses its bid, defenders keep their counters. The target is
+300, with the higher total winning if both qualify and tied totals continuing.
+
+Source: [Winning Moves rules](https://winning-moves.com/images/RookrulesV6s.pdf),
+Partnership for Six (printed page 23) and its Tournament reference. **Approved
+house interpretations:** bids are 70–120 in fives; all-pass advances the dealer
+and redeals without scoring; seats stay fixed throughout the match, rather than
+inventing a three-person version of Tournament's exchange after four hands.
+The opening minimum and increment come from the publisher; the explicit cap,
+all-pass convention, and fixed-seat adaptation are our conventions.
+
+Family low-card, moon, exposed nest, and adjustable scoring/bidding options do
+not carry over. Bot pace and graphics remain configurable. Six-player automatic
+lay-down is disabled. Both the seating lobby and in-game sidebar have **How to
+play**, reflecting the mode and actual settings. Five-player and new banter/
+reactions remain deferred; see [the preserved approved specification](docs/APPROVED-MODES.md).
+
+Browser checks use development-only Playwright on disposable local servers:
+`node scripts/check-modes.cjs` captures the rendered matrix, and
+`node scripts/check-mode-flow.cjs` exercises real lobby/reconnect flows.
+Results are under ignored `screenshots/six-player/`; these are browser emulations,
+not physical-device certification. High diagnostics suppress only automatic FPS
+downgrading in the test harness; production fallback remains enabled.
+
+## Family rules (implemented, authoritative for Family Four only)
 - Deck: 5–14 in Red, Black, Green, Yellow + the Rook = 41 cards. 9 cards each, 5 to the nest; the top nest card is shown face up during bidding and hidden once the bidder takes the nest.
 - Counters: 5 = 5, 10 = 10, 14 = 10, Rook = 20 → 120 per hand.
 - The Rook is always the highest card in the game; it belongs to the trump suit.
@@ -36,7 +73,7 @@ To share over the internet without hosting: `cloudflared tunnel --url http://loc
 - The winner of the last trick also gets the 5 buried cards (and their counters).
 - Play to 500.
 
-## Defaults chosen for unspecified details (all configurable in the lobby's settings by the host)
+## Family Four defaults (configurable by the host in the lobby)
 | Setting | Default | Notes |
 |---|---|---|
 | `minBid` | 70 | Opening/minimum bid. |
@@ -44,13 +81,23 @@ To share over the internet without hosting: `cloudflared tunnel --url http://loc
 | `maxBid` | 120 | |
 | `openerMustBid` | on | Player left of dealer bids first and must open at the minimum; if all others pass, they're stuck with it. Passed players can't re-enter. |
 | `allPassRule` | dealerStuck | Only used if `openerMustBid` is off: dealer stuck at min, or redeal. |
-| `allowLowCard` | off | Allows the bidder to choose high or low after taking the nest. The Rook always wins but must follow suit as trump; the former `rookAnytime` setting is ignored. |
+| `allowLowCard` | on | Permits the bidder to choose low after taking the nest; high remains the initial choice for every hand. The host can turn permission off before play. The Rook always wins but must follow suit as trump; the former `rookAnytime` setting is ignored. |
 | `bidderLeads` | on | Winning bidder leads the first trick (off = player left of dealer). Trick winner leads next. |
 | `winRule` | bidderMustMake | A team can only win on a hand where it took the bid and made it, reaching ≥ target. Defending points count but can't trigger a win (480 → 510 on defense keeps playing). Alternative `anyReach`: first to target wins; if both cross, bidding team wins. |
 | `targetScore` | 500 | |
 | `flipNestCard` | on | |
-| `botDelayMs` | 700 | Bot pacing. |
+| `botDelayMs` | 2000 | Configurable from 200–3000ms; ordinary bot bids, passes, nest decisions, and card plays wait this long. |
 - Must follow the led color if able; if void, play anything. Dealer rotates clockwise each hand; first dealer is random.
+
+These defaults apply to newly created family rooms. Host-selected room settings
+survive reconnects and returning to the lobby for as long as that room exists.
+Starting a game copies those settings into its own snapshot; defaults do not
+overwrite explicit settings. Rooms and games remain in memory only.
+
+Bot pacing adds 900ms before the next lead after a completed trick. The separate
+timing paths are unchanged: queued pre-plays wait 350ms (plus that 900ms pause),
+proven automatic finishes wait 260ms (plus 700ms between tricks), and entirely
+bot-filled tables wait 2500ms before starting the next hand.
 
 ## Project layout
 - `src/engine.js` — pure rules engine (deck, deal, bidding, nest, legal moves, trick winner, scoring, win check, per-seat views)
@@ -135,7 +182,7 @@ To share over the internet without hosting: `cloudflared tunnel --url http://loc
   `art-source/avatars/character-lineup.png`. This is a Blender geometry preview,
   not a screenshot of the browser's lighting or interface.
 
-## Table play update
+## Family Four table play features
 - **Pre-play:** tap a card while waiting. Tap again to cancel or another card to
   replace it. Only that player sees the queue. The server rechecks legality on
   the actual turn; an illegal choice is cleared without playing another card.
@@ -152,8 +199,9 @@ To share over the internet without hosting: `cloudflared tunnel --url http://loc
   tricks must be won by that individual, not their team. Success replaces the
   bidding team's hand score with +500; failure replaces it with -500. Defenders
   retain their captured points. A failed attempt still plays to the end.
-- **Low-card mode:** enable in House rules before starting. The bidder chooses
-  high or low with the nest. Low ranks beat high ranks within led/trump colors;
+- **Low-card mode:** permission is on by default and can be turned off in House
+  rules before starting. High remains selected unless the bidder chooses low
+  with the nest. Low ranks beat high ranks within led/trump colors;
   trump still beats other colors, Rook still beats all, and points never change.
   Bots understand both orders but currently choose high when they win the bid.
 - **Chat bubbles and banter:** seated players' messages appear near their table

@@ -50,14 +50,14 @@ function sanitizeSettings(input, base) {
   if (['dealerStuck', 'redeal'].includes(input.allPassRule)) s.allPassRule = input.allPassRule;
   if (['bidderMustMake', 'anyReach'].includes(input.winRule)) s.winRule = input.winRule;
   s.rookAnytime = false;
-  return s;
+  return E.settingsFor(s);
 }
 
 function seatOf(room, playerId) { return room.seats.findIndex((s) => s && s.type === 'human' && s.playerId === playerId); }
 
 function publicRoom(room) {
   return {
-    code: room.code, hostId: room.hostPublic, settings: room.settings, started: !!room.game,
+    code: room.code, mode: room.settings.mode, hostId: room.hostPublic, settings: room.settings, started: !!room.game,
     teams: Teams.publicTeams(room),
     seats: room.seats.map((s) => s && { type: s.type, name: s.name, character: s.character ?? 0, appearance: s.appearance || {}, connected: s.type === 'bot' || s.connected, isHost: s.playerId === room.hostId }),
     spectators: [...room.members.values()].filter((m) => seatOf(room, m.playerId) < 0).map((m) => m.name),
@@ -67,7 +67,7 @@ function publicRoom(room) {
 
 function broadcast(room) {
   const g = room.game;
-  if (g?.phase === 'playing' && !g.autoFinish && !g.trick.length && g.turn === g.bid.seat && g._proofAt !== g.played.length) {
+  if (g?.phase === 'playing' && E.profile(g.settings).autoFinish && !g.autoFinish && !g.trick.length && g.turn === g.bid.seat && g._proofAt !== g.played.length) {
     g._proofAt = g.played.length;
     g._autoPlan = proveFinish(g);
     if (g._autoPlan) { g.autoFinish = true; g.queued.fill(null); g.log.push('Bidder lays down guaranteed winners.'); }
@@ -151,10 +151,12 @@ io.on('connection', (socket) => {
     else socket.emit('noRoom');
   });
 
-  socket.on('createRoom', ({ name, playerId, character, appearance } = {}) => {
+  socket.on('createRoom', ({ name, playerId, character, appearance, mode = 'family4' } = {}) => {
+    let settings;
+    try { settings = E.settingsFor({ mode }); } catch { return fail('Unsupported game mode'); }
     name = clean(name) || 'Player'; character = cleanChar(character); playerId = clean(playerId, 64) || crypto.randomUUID();
     const code = makeCode();
-    const r = { code, hostId: playerId, hostPublic: crypto.randomUUID(), settings: { ...E.DEFAULT_SETTINGS }, seats: [null, null, null, null], members: new Map(), chat: [], game: null, botTimer: null, created: Date.now() };
+    const r = { code, hostId: playerId, hostPublic: crypto.randomUUID(), settings, modeSettings: {}, seats: Array(E.profile(settings).players).fill(null), members: new Map(), chat: [], game: null, botTimer: null, created: Date.now() };
     rooms.set(code, r);
     r.seats[0] = { type: 'human', playerId, name, character, connected: true };
     sysChat(r, `${name} created the table.`);
@@ -176,7 +178,7 @@ io.on('connection', (socket) => {
   const mySeat = () => seatOf(room, me.playerId);
 
   socket.on('sit', guard(({ seat }) => {
-    seat = Number(seat); if (!(seat >= 0 && seat < 4)) return;
+    seat = Number(seat); if (!Number.isInteger(seat) || seat < 0 || seat >= room.seats.length) return fail('Invalid seat');
     const cur = mySeat();
     const target = room.seats[seat];
     if (room.game && cur < 0 && target && target.type === 'bot') { // take over a bot mid-game
@@ -202,21 +204,35 @@ io.on('connection', (socket) => {
   socket.on('addBot', guard(({ seat, character }) => {
     if (!isHost()) return fail('Only the host can add bots');
     seat = Number(seat);
-    if (!Number.isInteger(seat) || seat < 0 || seat > 3) return fail('Invalid seat');
+    if (!Number.isInteger(seat) || seat < 0 || seat >= room.seats.length) return fail('Invalid seat');
     const t = room.seats[seat];
     if (t && t.type === 'human' && (!room.game || t.connected)) return fail('Seat taken');
     if (t && t.type === 'human') sysChat(room, `${t.name} was replaced by a bot.`);
     room.seats[seat] = makeBot(room, character);
     if (room.game) room.game.queued[seat] = null;
   }));
-  socket.on('fillBots', guard(() => { if (!isHost()) return; for (let i = 0; i < 4; i++) if (!room.seats[i]) room.seats[i] = makeBot(room); }));
+  socket.on('fillBots', guard(() => { if (!isHost()) return; for (let i = 0; i < room.seats.length; i++) if (!room.seats[i]) room.seats[i] = makeBot(room); }));
   socket.on('clearSeat', guard(({ seat }) => { if (!isHost() || room.game) return; if (room.seats[seat]?.type === 'bot') room.seats[seat] = null; }));
+  socket.on('setMode', guard(({ mode }) => {
+    if (!isHost()) return fail('Only the host can change modes');
+    if (room.game) return fail('Return to the lobby before changing modes');
+    const next = E.settingsFor({ mode });
+    if (room.seats.some(s => s && s.playerId !== room.hostId)) return fail('Other players must stand and bots must be removed before changing modes');
+    const count = E.profile(next).players;
+    if (room.seats.slice(count).some(Boolean)) return fail('Move to an earlier seat before changing modes');
+    room.modeSettings ||= {};
+    room.modeSettings[room.settings.mode] = { ...room.settings };
+    room.settings = E.settingsFor(room.modeSettings[mode] || next);
+    room.seats = Array.from({ length: count }, (_, i) => room.seats[i] || null);
+    room.teams = [];
+    sysChat(room, `Mode: ${E.profile(room.settings).label}.`);
+  }));
   socket.on('settings', guard((s) => { if (!isHost()) return fail('Only the host can change settings'); if (room.game && room.game.phase !== 'gameOver') return fail('Settings are locked during a game'); room.settings = sanitizeSettings(s, room.settings); }));
   socket.on('start', guard(() => {
     if (!isHost()) return fail('Only the host can start');
     if (room.game && room.game.phase !== 'gameOver') return fail('Game already in progress');
-    if (room.seats.some((s) => !s)) return fail('Fill all 4 seats (add bots for empty ones)');
-    room.game = E.newGame(room.settings, { dealer: crypto.randomInt(4) });
+    if (room.seats.some((s) => !s)) return fail(`Fill all ${room.seats.length} seats (add bots for empty ones)`);
+    room.game = E.newGame(room.settings, { dealer: crypto.randomInt(room.seats.length) });
     sysChat(room, 'Game started - good luck!');
   }));
   socket.on('bid', guard(({ amount }) => E.applyBid(room.game, mySeat(), amount)));

@@ -16,6 +16,7 @@
 <link rel="stylesheet" href="table-play.css">
 <link rel="stylesheet" href="clubhouse.css">
 <link rel="stylesheet" href="mobile-table.css">
+<link rel="stylesheet" href="modes.css">
 <link rel="preload" href="fonts/LilitaOne-Regular.ttf" as="font" type="font/ttf" crossorigin>
 <link rel="preload" href="fonts/Nunito-Variable.ttf" as="font" type="font/ttf" crossorigin>
 <link rel="modulepreload" href="js/art.js">
@@ -30,7 +31,7 @@
         <div class="logo"><span class="logo-bird" id="logoBird"></span><div class="wordmark">ROOK NIGHT</div></div>
         <h1 class="play-banner">Good cards.<br><em>Great company.</em></h1>
         <div class="hero-cards" id="heroCards" aria-hidden="true"></div>
-        <div class="home-badges"><span><i data-art="people"></i>4 players</span><span><i data-art="trophy"></i>2 teams</span><span><i data-art="cards"></i>Let’s play!</span></div>
+        <div class="home-badges"><span><i data-art="people"></i>4 or 6 players</span><span><i data-art="trophy"></i>2 teams</span><span><i data-art="cards"></i>Let’s play!</span></div>
       </div>
       <div class="signin panel glass">
         <div class="signin-heading"><h2><i data-art="people"></i>Pick your player</h2></div>
@@ -43,12 +44,13 @@
           <div class="char-grid" id="charGrid" role="group" aria-label="Characters"></div>
         </div>
         <details class="customize"><summary><i data-art="shirt"></i>Make it yours</summary><div id="appearanceControls"></div></details>
+<label class="step-title" for="createMode">Game mode</label><select id="createMode"><option value="family4">Family Four ? 4 players</option><option value="partnership6">Partnership for Six ? 6 players</option></select>
         <button id="createBtn" class="btn primary big"><i data-art="cards"></i>Create a table <span aria-hidden="true">→</span></button>
         <div class="join-row">
           <input id="codeInput" maxlength="4" placeholder="CODE" autocapitalize="characters" class="code-input" aria-label="Table code">
           <button id="joinBtn" class="btn outline"><i data-art="join"></i>Join table</button>
         </div>
-        <details class="quick-rules"><summary>New to the table?</summary><p>Partners sit across. Win the bid, choose trump, and take tricks together. First team to make its bid and reach 500 wins. Missing a player? Add a bot.</p></details>
+        <details class="quick-rules"><summary>New to the table?</summary><p>Choose Family Four or Partnership for Six before filling seats. Each has its own How to play in the lobby and game menu. Missing a player? Add a bot.</p></details>
         <button id="installBtn" class="btn ghost tiny hidden">⬇ Install app</button>
       </div>
     </div>
@@ -64,6 +66,8 @@
     <div class="lobby-wrap">
       <div class="lobby-main panel glass">
         <div class="lobby-head"><h2><i data-art="cards"></i>Gather round!</h2><div class="teams-note"><i data-art="people"></i>Partners sit across</div></div>
+        <label for="lobbyMode">Game mode</label><select id="lobbyMode"><option value="family4">Family Four ? 4 players</option><option value="partnership6">Partnership for Six ? 6 players</option></select><p class="help">Choose before others sit. Mode is locked during a match; changing it never removes an occupied seat.</p>
+        <details id="lobbyHelp" class="mode-help"><summary>How to play</summary><div id="lobbyHelpBody"></div></details>
         <div id="teamCards" class="team-cards"></div>
         <div id="lobbySeats" class="lobby-seats"></div>
         <div class="lobby-actions">
@@ -121,6 +125,7 @@
     <aside class="drawer" id="drawer">
       <div class="drawer-head"><b><i data-art="chat"></i>Table talk</b><button class="btn icon ghost" id="closeDrawer" aria-label="Close">✕</button></div>
       <button class="btn outline" id="drawerCharacter"><i data-art="palette"></i>Dress up!</button>
+      <details id="drawerHelp" class="mode-help"><summary>How to play</summary><div id="drawerHelpBody"></div></details>
       <div id="drawerTeams" class="team-cards"></div>
       <div class="chat-log" data-chat></div>
       <form class="chat-form" data-chatform><input maxlength="200" placeholder="Nice play, partner…" aria-label="Chat message"><button class="btn tiny primary">Send</button></form>
